@@ -1,0 +1,36 @@
+<HTML>
+<HEAD>
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
+    <meta http-equiv="Pragma" content="no-cache"/>
+    <meta http-equiv="Expires" content="60"/>
+    <title>Logger</title>
+</HEAD>
+<BODY>
+    <H1>Temperature Logger</h1>
+AMBIENT
+    <h2>Today</h2>
+    <figure>
+IMAGE_TODAY
+    </figure>
+	<br clear=all>
+	
+    <h2>Yesterday</h2>
+    <figure>
+IMAGE_YESTERDAY
+    </figure>
+	<br clear=all>
+
+    <h2>The Day before Yesterday</h2>
+    <figure>
+IMAGE_2DAYS
+    </figure>
+	<br clear=all>
+
+    <h2>and the Day before that</h2>
+    <figure>
+IMAGE_3DAYS
+    </figure>
+	<br clear=all>
+	
+	<p>If you want to see results before that, you will need to logon and download the datafiles. Sorry !</p>
+</BODY></HTML>

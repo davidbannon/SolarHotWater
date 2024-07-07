@@ -1,0 +1,247 @@
+#include <stdio.h>
+#include "pico/stdlib.h"
+#include "hardware/gpio.h"
+#include "hardware/adc.h"
+//#include "pico/binary_info.h"
+
+/* For Raspi Pico
+  Max Value longword=4,294,967,295 integer=2,147,483,647 cardinal=4,294,967,295 cpu32
+
+  To read the attached debug pico, "tio /dev/ttyACM0", ctrl-T to get menu, ctrl-t-q to quit.
+  Make sure you are in the dialout group to use serial port (ie USB).
+  Plug in the debug pico to see debug info.
+*/
+
+/*
+uses
+  pico_gpio_c,
+  pico_uart_c,
+  pico_adc_c,
+  pico_timer_c,
+  pico_c;
+*/
+
+// type TPumpState = (psOff, psCollectHot, psCollectFreeze);
+enum TPumpState {psOff, psCollectHot, psCollectFreeze};
+
+  //#define  BAUD_RATE 115200;
+  // ADC_REF_VOLT=2490;      // milliVolts
+  // ADC_REF_VOLT=3300;   // milliVolts
+#define  PumpOnDelta       3.0     // Collector has to be this much hotter than tank to turn pump on
+#define  PumpOffDelta      2.0     // Collector has to be this much hotter than tank for Pump to remain on
+#define  MaxTankTemp       90.0    // Don't send any more hot water to tank !
+#define  AntiFreezeTrigger 3.0     // Colder than this, we must pump some warm water up
+#define  AntiFreezeRelease 4.0     // Warmer than this, we can stop pumping
+#define  PumpPort          19      // TPicoPin.GP19        // GP19 conflicts with SPI-0 and I2C-1  (and UART 0 ??)
+#define  PtSelectPort      22      // TPicoPin.GP22    // GP22 conflicts with SPI-0 and I2C-1  (and UART 1 ??)
+#define  CntsPerReading    10      // We take multiple ADC readings
+
+// --------- Board Sensitive --------
+#define ADC0 0                     // GP26    When speaking to ADC functions, we must 
+#define ADC1 1                     // GP27    use the 0..3 syntax, but when using the
+#define ADC2 2                     // GP28    gpio unit (ie doing init) quote it GP number.
+
+  bool AntiFreezeOn = false;
+  enum TPumpState PumpState = psOff;
+
+
+// #define TESTMODE
+
+// Returns indicated Temp corrected for zero offset
+float GetExternalTemperature(int8_t SelectADC) {
+    float Cnt = 0.0;
+    gpio_put(PtSelectPort, (SelectADC==ADC1));   // high switches constant current to collector Pt
+    adc_select_input(SelectADC);                 // select the ADC port to use
+    busy_wait_us_32(100);                        // Settle ....
+    int i;
+    for (i = 1; i <= CntsPerReading; i++) {      
+#ifdef TESTMODE                                     // 2277 counts 100C, 1644 0C, 1963 50C
+        if (SelectADC==ADC1) Cnt = Cnt + 1644.0;    // Collector 
+        else Cnt = Cnt + 1963;                      // Tank
+#else
+        Cnt = Cnt + (float)adc_read();
+#endif
+    }
+#ifndef TESTMODE
+    adc_select_input(ADC2);                     // Input ADC2 is tied to gnd, account for any offset
+    for (i = 0; i < CntsPerReading; i++) {
+        Cnt = Cnt - (float)adc_read();
+    } 
+#endif
+    // return ((Cnt * 158) / 10) - 259740;      // thats milli degrees   ADJUST THIS !!!!
+    return (((Cnt * 15.8)  - 259740)/1000.0);   // really, really, check this !!!!
+}
+
+/*
+function GetExternalTemperature(const ADCInput:integer; SelectSensor : boolean):integer;
+    { PtTemp = (((181.15*CNT)  / (273+BOXT)) - 1000) * 100 / 385   -- NO, drop adjusting for ambient, its CPU Temp !
+    Pt temp = (Cnts*158)-259740 milli degrees   }
+var
+    Cnt : longWord = 0;
+    i : integer;
+begin
+    gpio_put(PtSelectPort, SelectSensor);       // switch constant current to correct sensor
+    adc_select_input(ADCInput);
+    busy_wait_us_32(100);                       // Settle ....
+    //Cnt := 0;
+    for i := 1 to CntsPerReading do
+        Cnt := Cnt + adc_read();
+    adc_select_input(2);                // Input ADC2 is tied to gnd, account for any offset
+    for i := 1 to CntsPerReading do
+        Cnt := Cnt - adc_read();
+    Result := ((Cnt * 158) div 10) - 259740;    // thats milli degrees
+
+    uart_puts(uart, ' Count=');
+    str(Cnt,strValue);
+    uart_puts(uart,strValue + ' T=');
+    str(Result, strValue);
+    uart_puts(uart, strValue);
+    uart_puts(uart, ' ');
+
+//    Result := Result div 1000;          // Return degrees but maybe, later, we'll work in milli degrees
+end; */
+
+void Report(float Collect, float Tank) {
+    switch (PumpState) {
+        case psOff :
+            printf("Pump is OFF, Collector %.2f and Tank %.2f\n", Collect, Tank);
+            break;
+        case psCollectHot :
+            printf("Pump is ON (hot), Collector %.2f and Tank %.2f\n", Collect, Tank);
+            break;
+        case psCollectFreeze :
+            printf("Pump is ON (freeze), Collector %.2f and Tank %.2f\n", Collect, Tank);
+            break;
+        default:
+            printf("Pump is OFF but why are we here ?  Collector %f and Tank %f\n", Collect, Tank);
+            break;
+    }
+}    
+
+
+                // Called repeatedly until power off.
+void ControlLoop() {
+    //float CollectorTemp = GetExternalTemperature(1, true);
+    //float TankTemp = GetExternalTemperature(0, false);
+    float CollectorTemp = GetExternalTemperature(ADC1);
+    float TankTemp = GetExternalTemperature(ADC0);
+    switch (PumpState) {
+        case psOff :                // if its OFF, we might turn it on
+            if (CollectorTemp < AntiFreezeTrigger) 
+                PumpState = psCollectFreeze;
+            else if ((CollectorTemp > (TankTemp + PumpOnDelta)) 
+                && (TankTemp < MaxTankTemp)) 
+                    PumpState = psCollectHot;
+            break;
+        case (psCollectHot) :       // Already collecting, so we may turn it off.
+            if (CollectorTemp < (TankTemp + PumpOffDelta)) 
+                PumpState = psOff;
+            break;
+        case (psCollectFreeze) :    // pumping 'cos of freeze ? We may turn it off.
+            if (CollectorTemp > AntiFreezeRelease)
+                PumpState = psOff;
+            break;
+        default :                   // not possible ?  Anyway, we'll set it off.
+            PumpState = psOff;
+    }                               // end of switch statement.
+    if ((PumpState == psCollectHot) || (PumpState == psCollectFreeze))
+        gpio_put(PumpPort, true);                                // Make it so.
+    else gpio_put(PumpPort, false); 
+    Report(CollectorTemp, TankTemp);
+    sleep_ms(500);
+}
+
+/*
+procedure ControlLoop;
+// Might change globals : PumpState, CollectorTemp, TankTemp, LEDOn
+begin
+    //gpio_put(PtSelectPort,True);
+    //busy_wait_us_32(100);
+    CollectorTemp := GetExternalTemperature(1, True);
+    //gpio_put(PtSelectPort,False);
+    //busy_wait_us_32(100);
+    TankTemp := GetExternalTemperature(0, False);
+    if PumpState = psOff then begin
+        if CollectorTemp < AntiFreezeTrigger then
+            PumpState := psCollectFreeze
+        else if (CollectorTemp > (TankTemp + PumpOnDelta))
+            and (TankTemp < MaxTankTemp) then
+                PumpState := psCollectHot;
+    end else begin                                    // ie the pump is on, either psCollectFreeze or psCollectHot
+        if PumpState = psCollectHot then begin
+            if CollectorTemp < TankTemp + PumpOffDelta then
+                PumpState := psOff;
+        end else                                      // ie psCollectFreeze
+            if CollectorTemp > AntiFreezeRelease then
+                PumpState := psOff;
+    end;
+    LEDOn := Not LEDOn;
+    gpio_put(PumpPort, PumpState in [psCollectHot, psCollectFreeze]);     // Make it so.
+    gpio_put(TPicoPin.LED, LEDOn);
+    ReportToUart();
+    busy_wait_us_32(500000);                        // half a second
+end; */
+
+
+
+int main() {
+    stdio_init_all();
+    gpio_init(PumpPort);
+    gpio_set_dir(PumpPort, true);      // Apparently out is true ??
+    gpio_init(PtSelectPort);
+    gpio_set_dir(PtSelectPort, true);
+    adc_init();
+    // Make sure GPIO is high-impedance, no pullups etc
+    //adc_gpio_init(ADC0);        // Thats the Tank Temp
+    //adc_gpio_init(ADC1);        // And thats the Collector on the roof.
+    //adc_gpio_init(ADC2);        // Thats our offset input, tied to gnd
+    adc_gpio_init(26);        // Thats GP26, ADC0, the Tank Temp
+    adc_gpio_init(27);        // And thats GP27, ADC1, the Collector on the roof.
+    adc_gpio_init(28);        // Thats GP28, ADC2, our offset input, tied to gnd
+    printf("Starting up.\n\n");
+    sleep_ms(2000);             // A little wait for tio to catch up
+    while (true) {
+        ControlLoop();
+    }
+    return 0;
+}
+
+/*
+  begin
+  //PumpOn := False;
+  LEDOn := False;
+  gpio_init(TPicoPin.LED);
+  gpio_set_dir(TPicoPin.LED,TGPIODirection.GPIO_OUT);
+  gpio_init(PumpPort);
+  gpio_set_dir(PumpPort,TGPIODirection.GPIO_OUT);
+  gpio_init(PtSelectPort);
+  gpio_set_dir(PtSelectPort,TGPIODirection.GPIO_OUT);
+
+  uart_init(uart, BAUD_RATE);
+  gpio_set_function(TPicoPin.UART_TX, TGPIOFunction.GPIO_FUNC_UART);
+  gpio_set_function(TPicoPin.UART_RX, TGPIOFunction.GPIO_FUNC_UART);
+
+  adc_init;
+  // Make sure GPIO is high-impedance, no pullups etc
+  adc_gpio_init(TPicoPin.ADC0);
+  adc_gpio_init(TPicoPin.ADC1);
+  adc_gpio_init(TPicoPin.ADC1);     // Thats our offset input, tied to gnd
+  // Turn on the Temperature sensor
+  // adc_set_temp_sensor_enabled(true);
+  // strValue := '';
+  repeat
+        ControlLoop;
+        // gpio_put(TPicoPin.LED,true);
+        // IntTemp := GetInternalTemperature();
+        // gpio_put(PumpPort,true);
+//        gpio_put(TPicoPin.LED,false);
+//        busy_wait_us_32(500000);                        // half a second
+  until False;
+end.  */
+
+// =============================================================================
+
+
+// A 12 bit A/D returns 4k counts FSD, 2.5v, around 1600 counts at 0 degrees 
+
+
