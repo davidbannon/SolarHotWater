@@ -1,0 +1,53 @@
+# Edit this file to introduce tasks to be run by cron.
+# 
+# Each task to run has to be defined through a single line
+# indicating with different fields when the task will be run
+# and what command to run for the task
+# 
+# To define the time you can provide concrete values for
+# minute (m), hour (h), day of month (dom), month (mon),
+# and day of week (dow) or use '*' in these fields (for 'any').
+# 
+# Notice that tasks will be started based on the cron's system
+# daemon's notion of time and timezones.
+# 
+# Output of the crontab jobs (including errors) is sent through
+# email to the user the crontab file belongs to (unless redirected).
+# 
+# For example, you can run a backup of all your user accounts
+# at 5 a.m every week with:
+# 0 5 * * 1 tar -zcf /var/backups/home.tgz /home/
+# 
+# For more information see the manual pages of crontab(5) and cron(8)
+# 
+# m h  dom mon dow   command
+
+# Finish off yesterdays graph, one minute after 1:00am
+1 0 * * * /home/dbannon/bin/raspicapture -y -d /home/dbannon/http/
+
+# New links for t,a,b,c.png, > 3 minutes after hour
+# 5 0 * * * /home/dbannon/bin/raspicapture -s -d /home/dbannon/http/
+
+# Every half hour, refresh todays graph, 3 minutes after half hour
+3,18,33,48 * * * * /home/dbannon/bin/raspicapture -p -d /home/dbannon/http/
+
+# ---------- Old Model Temp Logger -----------------
+# One minute past 1:00am, make new graph and refresh symlinks
+# 1 1 * * * /home/dbannon/bin/display.py -Ly -d /home/dbannon/http/ > /home/dbannon/logs/displayDaily.log 2>&1
+# Every hour, refresh todays graph, 2 minutes in.
+# 2 * * * * /home/dbannon/bin/display.py -t -d /home/dbannon/http/ > /home/dbannon/logs/displayHourly.log 2>&1
+
+# ---------- W A T E R I N G ------------------------
+# At 5 minutes past 9:00am, we run morning water in veggie garden.
+# -a says Alt System, the veggie garden, default near backdoor
+# -t Time to run in Minutes
+
+5 8 * * Fri,Sun,Tue,Thu  python2.7 -u /home/dbannon/bin/water-new.py -a -t15 >> /home/dbannon/logs/water.log 2>&1
+25 8 * * Fri,Sun,Tue,Thu  python2.7 -u /home/dbannon/bin/water-new.py -t10 >> /home/dbannon/logs/water.log 2>&1
+
+
+# 5 9 * * Fri,Sun,Tue,Wed python2.7 -u /home/dbannon/bin/water-new.py -a -t20 >> /home/dbannon/logs/water.log 2>&1
+# 30 8 * * Fri,Sun,Tue,Wed,Thu  python2.7 -u /home/dbannon/bin/water-new.py -t10 >> /home/dbannon/logs/water.log
+
+# 46 11 * * Fri,Sun,Tue,Wed python2.7 -u /home/dbannon/bin/water-new.py -v -a -t1 >> /home/dbannon/logs/water.log 2>&1
+
