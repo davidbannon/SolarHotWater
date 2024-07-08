@@ -17,7 +17,7 @@ I have long believed that the supplied controller did not do a good jobs, set up
 
 
 
-This project, at present, is really about understanding the system in detail so is seen as step one.  The controller was replaced with a Raspberry Pi Pico and a small electronics board that used the existing Pt1000 sensors and a small relay to switch the 240v pump. Using the existing sensors was seen as easy but getting accurate temperature readings over the necessary 0 to 120c (?)  with the electronics themselves varying between 0 to 45c was not easy. The Pico's A/D convert is noisy and irreproachable. So, once I  understand the true temperature range of the (particularly collector) sensors, I'll consider using **DS18B20** Temperature Sensors, accurate, precise and cheap but are limited to a max of 125c, probably not a problem but I need to be sure. Summer is coming ....
+This project, at present, is really about understanding the system in detail so is seen as step one.  The controller was replaced with a Raspberry Pi Pico and a small electronics board that used the existing Pt1000 sensors and a small relay to switch the 240v pump. Using the existing sensors was seen as easy but getting accurate temperature readings over the necessary 0 to 120c (?)  with the electronics themselves varying between 0 to 45c was not easy. The Pico's A/D convert is noisy and irreproducible. So, once I  understand the true temperature range of the (particularly collector) sensors, I'll consider using **DS18B20** Temperature Sensors, accurate, precise and cheap but are limited to a max of 125c, probably not a problem but I need to be sure. Summer is coming ....
 
 
 
