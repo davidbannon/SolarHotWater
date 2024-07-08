@@ -32,9 +32,11 @@ Raspicapture/*.csv
 Raspicapture/*.png
 *.log
 isockcapture/isocksvr
+isockcapture/isockcapture
 isockcapture/isocksvr-old
 Pico/isockcapture-old
 Raspicapture/raspicapture
 Raspicapture/raspicapture-old
 nohup.out
 ppas.sh
+http/index.html

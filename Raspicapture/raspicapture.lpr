@@ -41,7 +41,7 @@ program raspicapture;
   modprobe w1_therm
 
   Easy to put these into (an executable) /etc/rc.local
-  I also start the raspicapture -c -d /home/dbannon/http  there, as dbannon, using
+  I also start the raspicapture -c -d /home/dbannon/http/  there, as dbannon, using
   a bash script, startup, that waits a while after boot watching the clock to be sure
   time has been appropiatly set.
 
@@ -54,15 +54,15 @@ program raspicapture;
 uses
     {$IFDEF UNIX}cthreads, {$ENDIF}
     Classes, SysUtils, CustApp, DateUtils, pi_data_utils, Plotter, BaseUnix, Unix,
-    simpleipc;
+    simpleipc, isock;
 
 
-type TCtrlData = record
+(* type TCtrlData = record
     Collector : longint;
     Tank : longint;
     Pump : string;
     Valid : boolean;
-    end;
+    end;            *)
 
 type
 
@@ -81,7 +81,6 @@ type
         CommsServer : TSimpleIPCServer;
         procedure AddCtrlData(var DataSt: string);
         procedure CheckData;
-        procedure CommMessageReceived(Sender: TObject);
                     // Returns a full file name to the current data (csv) file.
         function DataFileName(ADate: TDateTime): string;
         procedure EnterCaptureLoop(Interval : TDateTime);
@@ -102,7 +101,7 @@ type
                           We start the server only if its the capture server (ie -c -d ...) and we
                           don't bother to check if another server is running, only one
                           capture -c should be running and only as server. }
-        procedure StartIPCServer();
+//        procedure StartIPCServer();
                         { result can be 0, 1, 2, 3 - 0 says no data, invalid, 1 says its based
                           on only 1 data point etc, ideally we want three ! Zeros the data points
                           as it goes. Caller may like to report a less than 3 result. }
@@ -120,9 +119,9 @@ const AverageOver=3;          // we take 3 measurements, each waiting a minute
 
 var
       ExitNow : boolean;
-      CtrlDataArray : array [0..2] of TCtrlData;
+      //CtrlDataArray : array [0..2] of TCtrlData;
       Application: TRaspiCapture;
-      // na : PSigActionRec;          // used to capture a KILL sig, new in OnRun, dispose in SignalRec
+      SocketThread : TSocketThread;
 
 procedure Traspicapture.PlotIt(FFName: string);
 var
@@ -153,32 +152,21 @@ begin
     else writeln('Error reading ports');
 end;
 
-procedure Traspicapture.DoRun;
+procedure Traspicapture.DoRun;        // must call Terminate if you want this to not be recalled.
 var
     ErrorMsg: String;
     NumbMinutes : integer;
     Interval : TDateTime;
     Index : integer;
     Pump, Heater : TRaspiPortStatus;
-    // List : TstringList;
 begin
-    // writeln('My process is ' + GetEnvironmentVariable('$'));    does not work here
-    // quick check parameters
-    // List := TStringList.Create;
-    // GetEnvironmentList(List, False);                            nope, this does not off PID either.
-    // writeln(List.Text);
-    // List.Free;
-
-
-
-    ErrorMsg:=CheckOptions('hm:cd:tpyDLsi', 'help minutes capture directory testmode plot debug log_file symlinks ioports');
+    // writeln('Traspicapture.DoRun');
+    ErrorMsg:=CheckOptions('hm:cd:tpyDLsix', 'help minutes capture directory testmode plot debug log_file symlinks ioports x86_64');
     if ErrorMsg<>'' then begin
         ShowException(Exception.Create(ErrorMsg));
         Terminate;
         Exit;
     end;
-
-
     if HasOption('i', 'ioports') then begin
         // We must be carefull to not reset the ports if they were active before we got here.
         Heater := ControlPort(PIN_HW_HEATER, RaspiPortRead);
@@ -206,7 +194,7 @@ begin
     end;
 
     if HasOption('D', 'debug') then begin
-        writelog('Starting up in Debug mode.');
+        writeln('Traspicapture.DoRun - Starting up in Debug mode.');
         DoDebug := true;
     end;
 
@@ -276,7 +264,8 @@ begin
     writeln('-p --plot        Plot from todays csv to png');
     writeln('-y --yesterday   Plot from yesterdays csv to png');
     writeln('-s --ioport      Display the io ports, 0=active');
-    writeln('eg raspicapture -c -d /home/dbannon/http  to start an indefinite capture run.');
+    writeln('-x --x86_64      Run in Intel mode, skip special Pi hardware');
+    writeln('eg raspicapture -c -d /home/dbannon/http/  to start an indefinite capture run.');
     writeln('If run without -c will just read and exit.');
     writeln('Always assumes 5 preset sensors present, reports absence with -1000000');
     Terminate;
@@ -411,9 +400,12 @@ begin
     writeln(F, TimeSt + DataSt);
     closeFile(F);
     if high(AnArray) >= 4 then begin
-        if HasOption('d', 'directory') then
-        FFileName := GetOptionValue('d', 'directory') + 'header.html'
-        else FFileName := 'header.html';
+        if HasOption('d', 'directory') then begin
+            FFileName := GetOptionValue('d', 'directory');
+            if FFileName[length(FFileName)] <> PathDelim then
+                FFileName := FFileName + PathDelim;
+            FFileName := FFileName + 'header.html';
+        end else FFileName := 'header.html';
         AssignFile(F, FFileName);
         Rewrite(F);
         writeln(F, '<HTML><BODY><h1>Davos Temperature Logger '
@@ -479,29 +471,33 @@ var
     Pump, Heater : TRaspiPortStatus;
 begin
     NextMeasure := Now() + Interval;
+    writeln('raspicapture : starting capture loop.');
     if HasOption('D', 'Debug') then
-         writeln('Traspicapture.EnterCaptureLoop starting IPC server');
-    StartIPCServer();                   // we will listen for app that gets temps from Solar ctrl.
-    Pump := ControlPort(PIN_HW_PUMP, RaspiPortRead);
-    if Pump = RaspiPortWrong then begin                     // The loop has priority, it can force the port
-         ControlPort(PIN_HW_PUMP,   RaspiPortReset);
-         Pump := ControlPort(PIN_HW_PUMP, RaspiPortRead);
-    end;
-    Heater := ControlPort(PIN_HW_HEATER, RaspiPortRead);
-    if Heater = RaspiPortWrong then begin                     // The loop has priority, it can force the port
-         ControlPort(PIN_HW_HEATER,   RaspiPortReset);
-         Pump := ControlPort(PIN_HW_HEATER, RaspiPortRead);
-    end;
-    if not ((Heater = RaspiPortSuccess) or (Heater = RaspiPortAlready))
-        and ((Pump = RaspiPortSuccess) or (Heater = RaspiPortAlready)) then begin
-            writelog('Error, cannot get access to the I/O Ports');
-            ReportPortStatus(Pump);
-            ReportPortStatus(Heater);
-            exit;
+         writeln('Traspicapture.EnterCaptureLoop starting socket server');
+    SocketThread := TSocketThread.Create(True);
+    SocketThread.Start;
+    if not HasOption('x', 'x86_64') then begin
+        Pump := ControlPort(PIN_HW_PUMP, RaspiPortRead);
+        if Pump = RaspiPortWrong then begin                     // The loop has priority, it can force the port
+             ControlPort(PIN_HW_PUMP,   RaspiPortReset);
+             Pump := ControlPort(PIN_HW_PUMP, RaspiPortRead);
         end;
+        Heater := ControlPort(PIN_HW_HEATER, RaspiPortRead);
+        if Heater = RaspiPortWrong then begin                     // The loop has priority, it can force the port
+             ControlPort(PIN_HW_HEATER,   RaspiPortReset);
+             Pump := ControlPort(PIN_HW_HEATER, RaspiPortRead);
+        end;
+        if not ((Heater = RaspiPortSuccess) or (Heater = RaspiPortAlready))
+            and ((Pump = RaspiPortSuccess) or (Heater = RaspiPortAlready)) then begin
+                write('Error, cannot get access to the I/O Ports');
+                ReportPortStatus(Pump);
+                ReportPortStatus(Heater);
+                exit;
+            end;
+    end;
     repeat
         if HasOption('D', 'debug') then writelog('About to check a batch of data');
-        CheckData();                                        // we grabbed some data above
+        if not HasOption('x', 'x86_64') then CheckData();            // we grabbed some data above
         inc(SubDataPoints);
         if SubDataPoints = AVERAGEOVER then begin
             SubDataPoints := 0;
@@ -511,14 +507,13 @@ begin
         end;
         while Now() < NextMeasure do begin                  // Wait here until next reading cycle.
             if ExitNow then begin                           // trigger by SIGTERM, default for kill command
-                ControlPort(PIN_HW_PUMP,   RaspiPortReset); // Note we always reset at exit, this is the
-                ControlPort(PIN_HW_HEATER, RaspiPortReset); // loop its the boss, OK ?
+                if HasOption('D', 'debug') then begin
+                    ControlPort(PIN_HW_PUMP,   RaspiPortReset); // Note we always reset at exit, this is the
+                    ControlPort(PIN_HW_HEATER, RaspiPortReset); // loop its the boss, OK ?
+                end;
                 terminate;                                  // this is the only exit from loop ??
                 exit;
             end;
-            if CommsServer.PeekMessage(100, false) then
-                 CommsServer.ReadMessage();
-            //sleep(100);
         end;
         NextMeasure := Now() + Interval;
         if HasOption('D', 'debug') then writelog('---- Collecting a new batch of temps ----');
@@ -533,7 +528,7 @@ begin
                         writeLog('Unable to fix bad data from sensor, at start of run');
                 AnArray[Index].Value := AnArray[Index].Value + RetValue;
             end;
-        if HasOption('D', 'debug') then writelog('Finished data collection');
+        if HasOption('D', 'debug') then write('Finished data collection');
     until 1<>1;
 end;
 
@@ -550,68 +545,6 @@ begin
         writeln(AnArray[Index].ID + ' ' + AnArray[Index].Name + ' ' + TempSt);
     end;
     CheckData;
-end;
-
-procedure Traspicapture.CommMessageReceived(Sender : TObject);
-Var
-    S, Sub1, Sub2 : String;
-    L1, L2 : longint;
-    i : integer = 0;
-begin
-
-    CommsServer .ReadMessage;
-    S := CommsServer.StringMessage;
-//    writeln('CommMessageRecieved - S1 = ', S);
-    // S should contain something like this '25750,25433,OFF'
-    Sub1 := S.Substring(0, S.IndexOf(','));
-//    writeln('CommMessageRecieved - S2 = ', S, ' >> ', Sub1);
-    if not TryStrToInt(Sub1, L1) then begin
-        writeln('ERROR, ControlData has invalid data : [' + Sub1 + ']');
-        exit;
-    end;
-    S := S.Remove(0, S.IndexOf(',')+1);
-
-    Sub2 := S.Substring(0, S.IndexOf(','));
-//    writeln('CommMessageRecieved - S3 = ', S, ' >> ', Sub2);
-    if not TryStrToInt(Sub2, L2) then begin
-        writeln('ERROR, ControlData has invalid data : [' + Sub2 + ']');
-        exit;
-    end;
-//    writeln('Traspicapture.CommMessageReceived S1f = [', S, ']');
-    S := S.Remove(0, S.IndexOf(',')+1);
-//    writeln('Traspicapture.CommMessageReceived S2f = [', S, ']');
-
-    if S = '' then begin
-        writeln('ERROR, ControlData has empty Pump');
-        exit;
-    end;
-    while i < 3 do begin
-        // writeln('Traspicapture.CommMessageReceived - looking for a slot to save data');
-        if not CtrlDataArray[i].Valid then begin
-             CtrlDataArray[i].Valid := True;
-             CtrlDataArray[i].Pump := S;
-             CtrlDataArray[i].Collector := L1;
-             CtrlDataArray[i].Tank := L2;
-//             writeln('Traspicapture.CommMessageReceived - found one');
-             break;
-        end;
-        inc(i);
-    end;
-    // if we did not find a free slot, just drop it on floor.
-end;
-
-
-procedure Traspicapture.StartIPCServer();
-begin
-        writeln('Traspicapture.StartIPCServer - starting IPC');
-        CommsServer  := TSimpleIPCServer.Create(Nil);
-        CommsServer.ServerID := 'raspicapture' {$ifdef UNIX} + '-' + GetEnvironmentVariable('USER'){$endif}; // on multiuser system, unique
-        CommsServer.OnMessageQueued := @CommMessageReceived;
-        CommsServer.Global:=True;                  // anyone can connect
-        //CommsServer.StartServer({$ifdef WINDOWS}False{$else}True{$endif});  // start listening, threaded
-        CommsServer.StartServer(false);
-        if CommsServer.Threaded then writeln('Traspicapture.StartIPCServer - running threaded');
-
 end;
 
 function Traspicapture.AverageCtrlData(out D : TCtrlData): integer;
@@ -638,10 +571,6 @@ begin
         D.Collector := D.Collector div i;
         D.Tank := D.Tank div i;
     end;
-//    writeln('Traspicapture.AverageCtrlData - collector ',  D.Collector);
-//    writeln('Traspicapture.AverageCtrlData - Tank ',  D.Tank);
-//    writeln('Traspicapture.AverageCtrlData - Pump ',  D.Pump);
-
 end;
 
 procedure Traspicapture.ZeroCtrlData();
@@ -670,18 +599,19 @@ begin
     DataSt := DataSt + ',' + inttostr(Data.Collector);
     DataSt := DataSt + ',' + inttostr(Data.Tank);
     DataSt := DataSt + ',' + Data.Pump;
-    writeln('Traspicapture.AddCtrlData - DataSt ', DataSt);
 end;
 
 // Handles, in this case, SIGINT (ie ctrl-c) and SIGTERM
 procedure HandleSigInt(aSignal: LongInt); cdecl;
 begin
     case aSignal of
-        SigInt : Writeln('Ctrl + C used');
-        SigTerm : writeln('TERM signal');
+        SigInt : Writeln('Ctrl + C used, will clean up and shutdown.');
+        SigTerm : writeln('TERM signal, will clean up and shutdown.');
     else
         writeln('Some signal received ??');
     end;
+    SocketThread.Terminate;
+    SocketThread.Free;
     ExitNow := True;        // not sure this is effective, its from a loop with sleep() ?
     sleep(110);
     Application.free;
@@ -704,6 +634,6 @@ begin
     Application.Run;
 
     if DoDebug then writeln('Freeing the application.');
-    Application.Free;
+    Application.Free;                  // cleanup of Thread and Socket not necessary here.
 end.
 

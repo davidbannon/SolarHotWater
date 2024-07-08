@@ -34,7 +34,12 @@ type TRaspiPortStatus = (RaspiPortSuccess,  // Port was available, now set as re
                         RaspiPortNoIO,      // Error accessing ports, possibly no I/O hardware
                         RaspiPortNoAccess); // Errro accessing ports, possibly permissions issue
 
-
+type TCtrlData = record
+    Collector : longint;
+    Tank : longint;
+    Pump : string;
+    Valid : boolean;
+    end;
 
 type
   //PSensorRec = ^TSensorRec;
@@ -70,6 +75,9 @@ var
     TempSensors : array of string = ('28-001414a820ff', '28-0014154270ff', '28-0014153fc6ff', '28-000004749871', '28-001414af48ff');
     TempNames : array of string = ('Hot Out', 'Roof', 'Tank Low', 'Ambient', 'Solar', 'Collector', 'Tank');
     DoDebug : boolean = false;      // Might be set in raspicapture.lpr
+    CtrlDataArray : array [0..2] of TCtrlData;
+    LockedBySocket : boolean = false;
+    LockedByCapture : boolean = false;
 
 implementation
 
@@ -311,7 +319,7 @@ function PopulateSensorArray(var DataArray : TSensorArray) : integer;
 var
     Index : integer;
     Info : TSearchRec;
-    Found : boolean;
+    Found : boolean = false;
 
     procedure AddToDataArray(ID, Name : string; V : longint; P : boolean);
     begin
