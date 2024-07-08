@@ -31,9 +31,9 @@ http/*.png
 Raspicapture/*.csv
 Raspicapture/*.png
 *.log
-isockcapture/isocksvr
-isockcapture/isockcapture
-isockcapture/isocksvr-old
+Legacy/isockcapture/isocksvr
+Legacy/isockcapture/isockcapture
+Legacy/isockcapture/isocksvr-old
 Pico/isockcapture-old
 Raspicapture/raspicapture
 Raspicapture/raspicapture-old

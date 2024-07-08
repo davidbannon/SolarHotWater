@@ -1,0 +1,213 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CONFIG>
+  <ProjectOptions>
+    <Version Value="12"/>
+    <General>
+      <Flags>
+        <MainUnitHasCreateFormStatements Value="False"/>
+        <MainUnitHasTitleStatement Value="False"/>
+        <MainUnitHasScaledStatement Value="False"/>
+      </Flags>
+      <UseAppBundle Value="False"/>
+    </General>
+    <BuildModes>
+      <Item Name="default" Default="True"/>
+    </BuildModes>
+    <PublishOptions>
+      <Version Value="2"/>
+      <DestinationDirectory Value="$(ProjPath)/published/"/>
+    </PublishOptions>
+    <RunParams>
+      <FormatVersion Value="2"/>
+    </RunParams>
+    <Units>
+      <Unit>
+        <Filename Value="adc.lpr"/>
+        <IsPartOfProject Value="True"/>
+        <IsVisibleTab Value="True"/>
+        <TopLine Value="7"/>
+        <CursorPos X="19" Y="29"/>
+        <UsageCount Value="231"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="../units/pico_uart_c.pas"/>
+        <EditorIndex Value="-1"/>
+        <TopLine Value="60"/>
+        <CursorPos X="70" Y="66"/>
+        <UsageCount Value="62"/>
+      </Unit>
+      <Unit>
+        <Filename Value="../units/pico_adc_c.pas"/>
+        <EditorIndex Value="-1"/>
+        <TopLine Value="22"/>
+        <UsageCount Value="40"/>
+      </Unit>
+      <Unit>
+        <Filename Value="../pico-fpcexamples/units/pico_gpio_c.pas"/>
+        <EditorIndex Value="1"/>
+        <TopLine Value="133"/>
+        <CursorPos X="44" Y="163"/>
+        <UsageCount Value="110"/>
+        <Loaded Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="../pico-fpcexamples/units/pico_c.pas"/>
+        <EditorIndex Value="2"/>
+        <CursorPos X="43" Y="25"/>
+        <UsageCount Value="110"/>
+        <Loaded Value="True"/>
+      </Unit>
+    </Units>
+    <JumpHistory HistoryIndex="29">
+      <Position>
+        <Filename Value="../pico-fpcexamples/units/pico_gpio_c.pas"/>
+        <Caret Line="47" Column="114" TopLine="29"/>
+      </Position>
+      <Position>
+        <Filename Value="adc.lpr"/>
+        <Caret Line="23" Column="10"/>
+      </Position>
+      <Position>
+        <Filename Value="../pico-fpcexamples/units/pico_gpio_c.pas"/>
+        <Caret Line="15" Column="5"/>
+      </Position>
+      <Position>
+        <Filename Value="adc.lpr"/>
+        <Caret Line="96" Column="24" TopLine="71"/>
+      </Position>
+      <Position>
+        <Filename Value="adc.lpr"/>
+        <Caret Line="36" Column="57" TopLine="19"/>
+      </Position>
+      <Position>
+        <Filename Value="adc.lpr"/>
+        <Caret Line="49" Column="5" TopLine="34"/>
+      </Position>
+      <Position>
+        <Filename Value="adc.lpr"/>
+        <Caret Line="33" Column="23" TopLine="16"/>
+      </Position>
+      <Position>
+        <Filename Value="adc.lpr"/>
+        <Caret Line="34" Column="33" TopLine="17"/>
+      </Position>
+      <Position>
+        <Filename Value="adc.lpr"/>
+        <Caret Line="124" Column="73" TopLine="94"/>
+      </Position>
+      <Position>
+        <Filename Value="adc.lpr"/>
+        <Caret Line="116" Column="34" TopLine="94"/>
+      </Position>
+      <Position>
+        <Filename Value="adc.lpr"/>
+        <Caret Line="122" Column="48" TopLine="94"/>
+      </Position>
+      <Position>
+        <Filename Value="adc.lpr"/>
+        <Caret Line="128" Column="24" TopLine="106"/>
+      </Position>
+      <Position>
+        <Filename Value="adc.lpr"/>
+        <Caret Line="118" Column="5" TopLine="107"/>
+      </Position>
+      <Position>
+        <Filename Value="adc.lpr"/>
+        <Caret Line="120" Column="40" TopLine="116"/>
+      </Position>
+      <Position>
+        <Filename Value="adc.lpr"/>
+        <Caret Line="17" Column="34" TopLine="10"/>
+      </Position>
+      <Position>
+        <Filename Value="adc.lpr"/>
+        <Caret Line="120" Column="16" TopLine="100"/>
+      </Position>
+      <Position>
+        <Filename Value="adc.lpr"/>
+        <Caret Line="50" Column="3" TopLine="31"/>
+      </Position>
+      <Position>
+        <Filename Value="adc.lpr"/>
+        <Caret Line="192" Column="24" TopLine="167"/>
+      </Position>
+      <Position>
+        <Filename Value="adc.lpr"/>
+        <Caret Line="137" Column="41" TopLine="120"/>
+      </Position>
+      <Position>
+        <Filename Value="adc.lpr"/>
+        <Caret Line="139" Column="35" TopLine="122"/>
+      </Position>
+      <Position>
+        <Filename Value="adc.lpr"/>
+        <Caret Line="34" Column="3" TopLine="16"/>
+      </Position>
+      <Position>
+        <Filename Value="adc.lpr"/>
+        <Caret Line="89" Column="54" TopLine="87"/>
+      </Position>
+      <Position>
+        <Filename Value="adc.lpr"/>
+        <Caret Line="31" Column="73" TopLine="19"/>
+      </Position>
+      <Position>
+        <Filename Value="adc.lpr"/>
+        <Caret Line="34" TopLine="13"/>
+      </Position>
+      <Position>
+        <Filename Value="adc.lpr"/>
+        <Caret Line="105" Column="24" TopLine="89"/>
+      </Position>
+      <Position>
+        <Filename Value="adc.lpr"/>
+        <Caret Line="107" Column="41" TopLine="90"/>
+      </Position>
+      <Position>
+        <Filename Value="adc.lpr"/>
+        <Caret Line="29" Column="10" TopLine="6"/>
+      </Position>
+      <Position>
+        <Filename Value="adc.lpr"/>
+        <Caret Line="114" Column="25" TopLine="98"/>
+      </Position>
+      <Position>
+        <Filename Value="adc.lpr"/>
+        <Caret Line="119" Column="68" TopLine="99"/>
+      </Position>
+      <Position>
+        <Filename Value="adc.lpr"/>
+        <Caret Line="91" TopLine="70"/>
+      </Position>
+    </JumpHistory>
+  </ProjectOptions>
+  <CompilerOptions>
+    <Version Value="11"/>
+    <Target>
+      <Filename Value="bin/adc"/>
+    </Target>
+    <SearchPaths>
+      <IncludeFiles Value="$(ProjOutDir)"/>
+      <OtherUnitFiles Value="../pico-fpcexamples/units"/>
+      <UnitOutputDirectory Value="lib/$(TargetCPU)-$(TargetOS)"/>
+    </SearchPaths>
+    <CodeGeneration>
+      <TargetProcessor Value="armv6m"/>
+      <TargetCPU Value="arm"/>
+      <TargetOS Value="embedded"/>
+    </CodeGeneration>
+    <Linking>
+      <Debugging>
+        <DebugInfoType Value="dsDwarf2"/>
+        <UseLineInfoUnit Value="False"/>
+      </Debugging>
+    </Linking>
+    <Other>
+      <CustomOptions Value="-Wpraspi_pico
+-godwarfsets
+-godwarfcpp
+-Xu"/>
+    </Other>
+  </CompilerOptions>
+</CONFIG>
