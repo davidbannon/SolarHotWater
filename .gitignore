@@ -40,3 +40,5 @@ Raspicapture/raspicapture-old
 nohup.out
 ppas.sh
 http/index.html
+credentials.h
+
