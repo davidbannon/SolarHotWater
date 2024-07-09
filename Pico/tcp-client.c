@@ -5,6 +5,8 @@
 #include "hardware/adc.h"
 #include "lwip/pbuf.h"
 #include "lwip/tcp.h"
+#include "credentials.h"  // You should provide MY_SSID, MY_PASS and TARGET_IP
+                          // for obvious reasons, this file is not pushed to github
 
 // To compile, mkdir build; cd build;
 // export PICO_SDK_PATH=/home/dbannon/Pico2/SDK   // that being where SDK lives, contains dir like pico-examples and external.
@@ -16,9 +18,9 @@
 //  Because of setting setting in CMakeList.txt we don't need to use the debug probe.
 //  else Plug in the debug pico to see debug info. 
 
-char SSID[] = "iiNetB50DEB";
-char PASS[] = "--PASSWORD--";
-char TARGET_IP[] = "192.168.1.XXX";    // the real logger Pi
+// char MY_SSID[] = "...     // Please define these in credentials.h
+// char MY_PASS[] = "...";
+// char TARGET_IP[] = "...";    
 
 char MsgBuff[255];                  // where we put the message to send
 
@@ -358,7 +360,7 @@ int main() {
     printf("Connecting to %s on port %d\n", TARGET_IP, PORT);
     
     printf("Connecting to WiFi...\n");
-    if (cyw43_arch_wifi_connect_timeout_ms(SSID, PASS, CYW43_AUTH_WPA2_AES_PSK, 30000)) {
+    if (cyw43_arch_wifi_connect_timeout_ms(MY_SSID, MY_PASS, CYW43_AUTH_WPA2_AES_PSK, 30000)) {
         printf("failed to connect to WiFi.\n");
         return 1;
     } else {
