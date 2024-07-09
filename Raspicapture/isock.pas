@@ -19,7 +19,6 @@ uses ssockets, Classes, sysutils {, BaseUnix};
 
 const
   ThePort : integer=4100;
-  IPCServer = 'raspicapture';   // Plus unix user name
 
 //type    TCaptureMesgProc = procedure(const St : string) of object;
 
@@ -62,9 +61,7 @@ uses pi_data_utils;
 procedure TSocketThread.Execute;
 begin
     ServerApp := TINetServerApp.Create(ThePORT);
-    //writeln('TSocketThread.Execute - will call ServerApp.Run');
     ServerApp.Run;
-    //writeln('TSocketThread.Execute - ServerApp.Run has returned');
 end;
 
 constructor TSocketThread.Create(CreateSuspended: boolean);
@@ -114,7 +111,6 @@ begin
   Until (Count=0);                     // note we only expect one short message at a time.
   Data.Free;
   // FServer.StopAccepting;             // we want it to continue listening.
-  //writeln('TINetServerApp.OnConnect - done.');
 end;
 
 procedure TINetServerApp.Run;
@@ -141,7 +137,7 @@ var
     begin
         EnterCriticalSection(SocketCriticalSection);
         try
-            if LockedByCapture then begin                 // will, occasionally happen, its OK if occasionally
+            if LockedByCapture then begin           // will, occasionally happen, its OK if occasionally
                 writeln('UpdateCtrlArray - Unable to lock CtrlDataArray, OK');
                 exit;
             end;
@@ -159,7 +155,7 @@ var
                 end;
                 inc(i);
             end;
-            // if we did not find a free slot, just drop it on floor.                // update CtrlDataArray
+            // if we did not find a free slot, just drop it on floor.
         finally
             LockedBySocket := False;
             LeaveCriticalSection(SocketCriticalSection);

@@ -364,8 +364,8 @@ end;
   not present. So, in test mode, position in string of 1..5 is invalid and we expect
   to find one extra, valid, sensor. Then, in all cases, we find P and H, single char
   0 or 1, 0 representing item turned ON.
-  Then, optionally, we will have three more data points, Collecor and Tank temp and
-  pump status. If those are preseent, they are eexpected to be valid.
+  Then, optionally, we will have three more data points, Collector and Tank temp and
+  pump status. If those are present, they are expected to be valid.
   In all cases, temps are long int, in milli degrees C.
 }
 procedure Traspicapture.SaveContentToFile();
