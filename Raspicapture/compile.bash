@@ -4,8 +4,8 @@ EXECUTABLE="raspicapture"
 
 # FPC="/media/dbannon/68058302-90c2-48af-9deb-fb6c477efea1/libqt5pas1/raspitest/FPC/fpc-3.2.2/bin/fpc"
 
-FPC="/home/dbannon/ExtDrv/FPC/fpc-3.2.2/bin/fpc"
-
+# FPC="/home/dbannon/ExtDrv/FPC/fpc-3.2.2/bin/fpc"
+FPC="fpc"
 
 if [ -e "$EXECUTABLE" ]; then
     rm -f "$EXECUTABLE"-old

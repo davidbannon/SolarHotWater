@@ -60,7 +60,10 @@ procedure ShowSensorInformation();
                 // it finds as present. This may include the know one and any others.
 function PopulateSensorArray(var DataArray : TSensorArray) : integer;
 
-                // Attempts to read the temperature of each sensor in the passed array.
+                // Reads the temperature from indicated device. As bad reads not uncommon
+                // we will try again if necessary, this produces a close to 100% result.
+                // Data returned is an integer representing milli degrees C, InvalidTemp
+                // means something still managed to go wrong.
 function ReadDevice(DName : string) : integer;
 
                 // Must call this before using a port (PortNo, RaspiPortRead|RaspiPortWrite)
@@ -68,6 +71,11 @@ function ReadDevice(DName : string) : integer;
 function ControlPort(PortNo : string; AnAction : TRaspiPortControl) : TRaspiPortStatus;
 
 function ReadRaspiPort(Port : string; out Value : char) : boolean;
+
+                // Returns True if the Port can be accessed and returns with its state, 'in', 'out', '';
+                // If True and State = '' then the port is 'unexported', ie, not in use.
+                // If it ret False, an error, reason is in State ('no gpio' or 'no access')
+function TestRaspiPort(PortNo : string; out State : string) : boolean;
 
 var
     DevArray : TStringArray;
@@ -168,8 +176,7 @@ begin
     end;
 end;
 
-// Returns True if the Port can be accessed and returns with its state, 'in', 'out', '';
-// If it ret False, an error, reason is in State ('no gpio' or 'no access')
+
 function TestRaspiPort(PortNo : string; out State : string) : boolean;
 var
    F : TextFile;
@@ -259,6 +266,7 @@ begin
     FindClose(Info);
 end;    
 
+
 function ReadDevice(DName : string) : integer;
 var
     InFile: TextFile;
@@ -274,6 +282,14 @@ begin
         try
             reset(InFile);
             readln(InFile, St);
+            if St = '' then begin         // its not unusual for a read to fail
+                //writeln('ReadDevice - trying again');
+                reset(InFile);            // in almost all cases, a reading again is succeessful
+                readln(InFile, St);
+                { if St = '' then
+                    writeln('ReadDevice - still empty')
+                else writeln('ReadDevice - fixed');  }
+            end {else writeln('ReadDevice - first read good')};
             closeFile(InFile);
         except
             on E: EInOutError do begin
@@ -281,11 +297,16 @@ begin
                 exit(InvalidTemp);
             end;
         end;
-        if St = '' then
-            Result := InvalidTemp
+        if St = '' then begin
+            Result := InvalidTemp;
+            // writeln('ReadDevice - empty string');
+        end
         else
             Result := strtoint(St);         // Brave ! No error check ?
-    end else Result := InvalidTemp;
+    end else begin
+        Result := InvalidTemp;
+        writeln('ReadDevice file does not exist' + FFileName);
+    end;
 end;
 
 procedure UsePorts();                   // Just a test function

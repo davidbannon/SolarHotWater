@@ -83,6 +83,7 @@ type
         procedure CheckData;
                     // Returns a full file name to the current data (csv) file.
         function DataFileName(ADate: TDateTime): string;
+        procedure DisplayIOPortList;
         procedure EnterCaptureLoop(Interval : TDateTime);
         //procedure MakeTheSymLinks();
                         // If passed a csv filename, plots that, otherwie it must be either a
@@ -93,6 +94,7 @@ type
                         { Saves the contents of AnArray, each file item is the sum of AVERAGEOVER
                           points divided by AVERAGEOVER. Does not validate the data.  }
         procedure SaveContentToFile;
+                        // Writes, to stdout, the char in Heater and Pump ports.
         procedure ShowIOPorts();
         procedure ShowSensors();
                         { Start the server that other apps can communicate via. At preesent,
@@ -142,6 +144,7 @@ begin
     Plot.Free;
 end;
 
+
 procedure Traspicapture.ShowIOPorts;
 var
     P, H : char;
@@ -150,6 +153,30 @@ begin
         and ReadRaspiPort(PIN_HW_HEATER, H) then
               writeln('Ports Pump: ' + P + ' and heater: ' + H)
     else writeln('Error reading ports');
+end;
+
+// Shows status of ports we are interested in. 0=low. Reports 'unexported' if so.
+procedure Traspicapture.DisplayIOPortList;
+var
+    Ports : TStringArray = ('22', '17', '8', '25');
+    St, State : string;
+    Ch : char;
+begin
+    for St in Ports do begin
+        if not TestRaspiPort(St,  State) then
+            writeln('GPIO ', St, ' does not appear to be valid')
+        else begin
+            if State = '' then writeln('GPIO ', St, ' is unexported, not in use.')
+            else begin
+                if not ReadRaspiPort(St, ch) then
+                    writeln('Error reading port ' + St);
+                if State = 'in' then
+                    writeln('GPIO ', St, ' is set to IN, value = ', Ch);
+                if State = 'out' then
+                    writeln('GPIO ', St, ' is set to OUT, value = ', Ch);
+            end;
+        end;
+    end;
 end;
 
 procedure Traspicapture.DoRun;        // must call Terminate if you want this to not be recalled.
@@ -161,24 +188,30 @@ var
     Pump, Heater : TRaspiPortStatus;
 begin
     // writeln('Traspicapture.DoRun');
-    ErrorMsg:=CheckOptions('hm:cd:tpyDLsix', 'help minutes capture directory testmode plot debug log_file symlinks ioports x86_64');
+    ErrorMsg:=CheckOptions('hm:cd:tpyDLsixn', 'no_socket help minutes capture directory testmode plot debug log_file symlinks ioports x86_64');
     if ErrorMsg<>'' then begin
         ShowException(Exception.Create(ErrorMsg));
         Terminate;
         Exit;
     end;
     if HasOption('i', 'ioports') then begin
+        DisplayIOPortList;
+        Terminate;
+        Exit;
+
+
+        // ------ Code below has problems, gives exception, seems to reset an active port .....
         // We must be carefull to not reset the ports if they were active before we got here.
         Heater := ControlPort(PIN_HW_HEATER, RaspiPortRead);
         Pump   := ControlPort(PIN_HW_PUMP,   RaspiPortRead);
-        if ((Heater = RaspiPortSuccess) or (Heater = RaspiPortAlready))
+        if ((Heater = RaspiPortSuccess) or (Heater = RaspiPortAlready))         // it was in read or we set it so.
             and ((Pump = RaspiPortSuccess) or (Pump = RaspiPortAlready)) then
                 ShowIOPorts()
         else begin
             ReportPortStatus(Pump);
-            ReportPortStatus(Heater);
+            ReportPortStatus(Heater);                                           // in this case, an error msg really
         end;
-        if Heater = RaspiPortSuccess then ControlPort(PIN_HW_HEATER, RaspiPortReset);
+        if Heater = RaspiPortSuccess then ControlPort(PIN_HW_HEATER, RaspiPortReset);       // NOOOOOOO !
         if Pump = RaspiPortSuccess then ControlPort(PIN_HW_Pump, RaspiPortReset);
 
 (*        if ControlPort(PIN_HW_HEATER, RaspiPortRead)
@@ -223,6 +256,7 @@ begin
         Interval := EnCodeTime (0,0,10,0);          // Test mode, 10 second interval
 
     PopulateSensorArray(AnArray);                   // One-off setup of array with Sensor IDs
+    if HasOption('D', 'debug') then writelog('Sensor Array Length is ' + inttostr(Length(AnArray)));
 
     if HasOption('D', 'debug') then writelog('Collecting Data');
     for Index := low(AnArray) to high(AnArray) do   // capture first set of data
@@ -263,8 +297,9 @@ begin
     writeln('-D --debug       Prints, to std out, some "as we go" information.');
     writeln('-p --plot        Plot from todays csv to png');
     writeln('-y --yesterday   Plot from yesterdays csv to png');
-    writeln('-s --ioport      Display the io ports, 0=active');
+    writeln('-i --ioport      Display the io ports, 0=active or low.');
     writeln('-x --x86_64      Run in Intel mode, skip special Pi hardware');
+    writeln('-n --no_socket   Do not listen on tcp socket');
     writeln('eg raspicapture -c -d /home/dbannon/http/  to start an indefinite capture run.');
     writeln('If run without -c will just read and exit.');
     writeln('Always assumes 5 preset sensors present, reports absence with -1000000');
@@ -474,8 +509,12 @@ begin
     writeln('raspicapture : starting capture loop.');
     if HasOption('D', 'Debug') then
          writeln('Traspicapture.EnterCaptureLoop starting socket server');
-    SocketThread := TSocketThread.Create(True);
-    SocketThread.Start;
+    if HasOption('n', 'no_socket') then
+         writeln('Not Listening for Ctrl Box temps over TCP')
+    else begin
+        SocketThread := TSocketThread.Create(True);
+        SocketThread.Start;
+    end;
     if not HasOption('x', 'x86_64') then begin
         Pump := ControlPort(PIN_HW_PUMP, RaspiPortRead);
         if Pump = RaspiPortWrong then begin                     // The loop has priority, it can force the port
@@ -511,15 +550,16 @@ begin
                     ControlPort(PIN_HW_PUMP,   RaspiPortReset); // Note we always reset at exit, this is the
                     ControlPort(PIN_HW_HEATER, RaspiPortReset); // loop its the boss, OK ?
                 end;
-                terminate;                                  // this is the only exit from loop ??
-                exit;
+                terminate;                                  // this is the only exit from reepeat loop,
+                exit;                                       // 'terminate' is a signal to Application object
             end;
+            sleep(20);                  // Hmm, there was no sleep in this While ....
         end;
         NextMeasure := Now() + Interval;
         if HasOption('D', 'debug') then writelog('---- Collecting a new batch of temps ----');
         for Index := low(AnArray) to high(AnArray) do       // Get fresh data into existing array
             if AnArray[Index].Present then begin            // Will populate as many sensors as found
-                RetValue := ReadDevice(AnArray[Index].ID);
+                RetValue := ReadDevice(AnArray[Index].ID);  // ReadDevice now tries again if it gets bad data so should be rare next block is used
                 if (RetValue = InvalidTemp) then            // Bad data, at AVERAGEOVER=3 we have a 2/3 chance ....
                     if(SubDataPoints > 0) then begin        // yes !  we can use previous value(s)
                         RetValue := AnArray[Index].Value div SubDataPoints;
@@ -588,13 +628,14 @@ var
     Data : TCtrlData;
     Points : integer;
 begin
+    if HasOption('n', 'no_socket') then exit;
     Points := AverageCtrlData(Data);
     if Points = 0 then begin
         DataSt := DataSt + ', , , ';
         writeln('No solar control data available');
         exit;
     end
-    else if Points < 3 then                           // ToDo : uncomment this !!!
+    else if Points < 3 then
             writeln(Points, ' solar control points available');
     DataSt := DataSt + ',' + inttostr(Data.Collector);
     DataSt := DataSt + ',' + inttostr(Data.Tank);
@@ -610,8 +651,10 @@ begin
     else
         writeln('Some signal received ??');
     end;
-    SocketThread.Terminate;
-    SocketThread.Free;
+    if not Application.HasOption('n', 'no_socket') then begin
+        SocketThread.Terminate;
+        SocketThread.Free;
+    end;
     ExitNow := True;        // not sure this is effective, its from a loop with sleep() ?
     sleep(110);
     Application.free;
