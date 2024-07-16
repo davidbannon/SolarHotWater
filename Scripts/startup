@@ -36,7 +36,7 @@ if [ "$RES" -lt "$RECENT" ]; then
 fi
 sleep 10
 cd /home/dbannon/http; nohup /usr/bin/python2.7 -u -m SimpleHTTPServer 8080 > /home/dbannon/logs/web.log & 
-/home/dbannon/bin/raspicapture -c -d /home/dbannon/http
+nohup /home/dbannon/bin/raspicapture -c -d /home/dbannon/http  > /home/dbannon/logs/raspicapture.log 2>&1 &
 
 # nohup python2.7 -u /home/dbannon/bin/capture.py -w -d /home/dbannon/http/ -c > /home/dbannon/logs/capture.log 2>&1 &
 # sudo -u dbannon python2.7 /home/dbannon/bin/water-new.py -v -I > /home/dbannon/logs/water.log

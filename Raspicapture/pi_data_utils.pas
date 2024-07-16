@@ -62,6 +62,8 @@ function PopulateSensorArray(var DataArray : TSensorArray) : integer;
 
                 // Reads the temperature from indicated device. As bad reads not uncommon
                 // we will try again if necessary, this produces a close to 100% result.
+                // Most likely failure is read returns an empty string, just re-read.
+                // Less frequently, FileExits() says its not there, try again.
                 // Data returned is an integer representing milli degrees C, InvalidTemp
                 // means something still managed to go wrong.
 function ReadDevice(DName : string) : integer;
@@ -272,41 +274,44 @@ var
     InFile: TextFile;
     st : string;
     FFileName : string;
+
+    procedure DoTheRead();
+    begin
+        if FileExists(FFileName) then begin
+            AssignFile(InFile, FFileName);
+            try
+                reset(InFile);
+                readln(InFile, St);
+                if St = '' then begin         // its not unusual for a read to fail
+                    reset(InFile);            // in almost all cases, a reading again is succeessful
+                    readln(InFile, St);
+                end;
+                closeFile(InFile);
+            except
+                on E: EInOutError do begin
+                    writeln('File Error when reading ' + DNAme + ' : ' + E.Message);
+                    Result := InvalidTemp;
+                    exit;
+                end;
+            end;
+            if St = '' then begin
+                Result := InvalidTemp;
+                // writeln('ReadDevice - empty string');
+            end
+            else
+                Result := strtoint(St);         // Brave ! No error check ?
+        end else  Result := InvalidTemp;
+    end;
+
 begin
     if pos('sys', DName) < 1 then
         DName := DEV_PATH + DName;
-    FFileName := DName + '/' + 'temperature'; 
-    // writeln('Opening ' + FFileName);
-    if FileExists(FFileName) then begin
-        AssignFile(InFile, FFileName);
-        try
-            reset(InFile);
-            readln(InFile, St);
-            if St = '' then begin         // its not unusual for a read to fail
-                //writeln('ReadDevice - trying again');
-                reset(InFile);            // in almost all cases, a reading again is succeessful
-                readln(InFile, St);
-                { if St = '' then
-                    writeln('ReadDevice - still empty')
-                else writeln('ReadDevice - fixed');  }
-            end {else writeln('ReadDevice - first read good')};
-            closeFile(InFile);
-        except
-            on E: EInOutError do begin
-                writeln('File Error when reading ' + DNAme + ' : ' + E.Message);
-                exit(InvalidTemp);
-            end;
-        end;
-        if St = '' then begin
-            Result := InvalidTemp;
-            // writeln('ReadDevice - empty string');
-        end
-        else
-            Result := strtoint(St);         // Brave ! No error check ?
-    end else begin
-        Result := InvalidTemp;
-        writeln('ReadDevice file does not exist' + FFileName);
-    end;
+    FFileName := DName + '/' + 'temperature';
+    DoTheRead();
+    if Result = InvalidTemp then
+        DoTheRead();
+    if Result = InValidTemp then
+        writeln(DateTimeToStr(now()) + ' ReadDevice file does not exist' + FFileName);
 end;
 
 procedure UsePorts();                   // Just a test function

@@ -242,26 +242,23 @@ begin
     while not eof(F) do begin
         readln(F, s);
         Stl.DelimitedText := S;
+        writeln('TPlot.LoadFile S=' + S + ']');
         DataArray[Result].Time := Stl[0];
         for i := 0 to 4 do
             DataArray[Result].Data[i] := strtoint(Stl[i+1]);     // +1 because first element is Time
         // OK, after here format may change. If there are six temps, ignore #6
         case Stl.Count of                                        // must set it to Pump index
-            8, 11 : i := 5;
-            9, 12 : i := 6;                                      // Skip over testing temp entry
+            8, 11 : i := 6;
+            9, 12 : i := 7;                                      // Skip over testing temp entry
         else begin
             writeln('Invalid Line in ' + FFileName + ' [' + S + ']');
             exit(0);
             end;
         end;
-
-if DoDebug and (Result > 400) then
-writeln('TPlot.LoadFile - i=', i, ' C=', Stl.Count, ' S=', S, ' result=', result);
-
         DataArray[Result].Pump := Stl[i][1];
         inc(i);
         DataArray[Result].Heater := Stl[i][1];
-        inc(i);                              // if i points to valid date, we have ctrldata
+        inc(i);                              // if i points to valid date, we have ctrldata too
         if i < StL.Count then begin          // if count = 9, last legal index is 8
             DataArray[Result].Data[i] := strtoint(Stl[5]);        // Collector
             inc(i);                                               // Tank
@@ -296,6 +293,7 @@ begin
         if DataArray[i].Pump = '0' then begin                  // This is pump powerline
              Canvas.DrawPixel(OriginX+i, PumpY, colBlack);
              Canvas.DrawPixel(OriginX+i, PumpY+1, colBlack);
+             //writeln('TPlot.DrawPlot : pump plot at ', OriginX+i);
         end;
 {        if DataArray[i].Heater = '0' then                     // Uncomment to display heater power line
              Canvas.DrawPixel(OriginX+i, HeaterY, colBlack);   }

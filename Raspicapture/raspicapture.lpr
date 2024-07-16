@@ -528,7 +528,7 @@ begin
         end;
         if not ((Heater = RaspiPortSuccess) or (Heater = RaspiPortAlready))
             and ((Pump = RaspiPortSuccess) or (Heater = RaspiPortAlready)) then begin
-                write('Error, cannot get access to the I/O Ports');
+                writeln('Error, cannot get access to the I/O Ports');
                 ReportPortStatus(Pump);
                 ReportPortStatus(Heater);
                 exit;
@@ -559,8 +559,10 @@ begin
         if HasOption('D', 'debug') then writelog('---- Collecting a new batch of temps ----');
         for Index := low(AnArray) to high(AnArray) do       // Get fresh data into existing array
             if AnArray[Index].Present then begin            // Will populate as many sensors as found
-                RetValue := ReadDevice(AnArray[Index].ID);  // ReadDevice now tries again if it gets bad data so should be rare next block is used
+                RetValue := ReadDevice(AnArray[Index].ID);  // ReadDevice now tries again if it gets no data so should be rare next block is used
                 if (RetValue = InvalidTemp) then            // Bad data, at AVERAGEOVER=3 we have a 2/3 chance ....
+                    RetValue := ReadDevice(AnArray[Index].ID);     // Someetimes the device is reported as not being present (as opposed to no data)
+                if (RetValue = InvalidTemp) then                   // hmm, still wrong ? see if we can fudge it.
                     if(SubDataPoints > 0) then begin        // yes !  we can use previous value(s)
                         RetValue := AnArray[Index].Value div SubDataPoints;
                         WriteLog('Fixed bad data from sensor');
