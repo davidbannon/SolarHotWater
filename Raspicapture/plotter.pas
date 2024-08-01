@@ -242,7 +242,7 @@ begin
     while not eof(F) do begin
         readln(F, s);
         Stl.DelimitedText := S;
-        writeln('TPlot.LoadFile S=' + S + ']');
+        // writeln('TPlot.LoadFile S=' + S + ']');
         DataArray[Result].Time := Stl[0];
         for i := 0 to 4 do
             DataArray[Result].Data[i] := strtoint(Stl[i+1]);     // +1 because first element is Time

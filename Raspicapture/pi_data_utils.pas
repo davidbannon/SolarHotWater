@@ -47,6 +47,7 @@ type
         ID : string;    // eg 28-001414a820ff
         Name : string;  // eg Ambient
         Value : longint;    // raw numbers from sensor or -1 if invalid, milli degrees C
+        Points : integer;   // number of data points collected for this sensor
         Present : boolean;  // Is this sensor present ?
   end;
 
@@ -58,7 +59,7 @@ procedure ShowSensorInformation();
                 // Passed an empty dynamic array, it first puts details of known
                 // sensors in it, then looks at all available sensors marking any
                 // it finds as present. This may include the know one and any others.
-function PopulateSensorArray(var DataArray : TSensorArray) : integer;
+function PopulateSensorArray(var DataArray : TSensorArray; NotRaspi : boolean) : integer;
 
                 // Reads the temperature from indicated device. As bad reads not uncommon
                 // we will try again if necessary, this produces a close to 100% result.
@@ -82,6 +83,8 @@ function TestRaspiPort(PortNo : string; out State : string) : boolean;
 var
     DevArray : TStringArray;
     Dev : string;
+                                    // an array of the 5 sensors we know should be present on Raspi
+                                    // on x86_64 we mark these Present, just a little lie to test
     TempSensors : array of string = ('28-001414a820ff', '28-0014154270ff', '28-0014153fc6ff', '28-000004749871', '28-001414af48ff');
     TempNames : array of string = ('Hot Out', 'Roof', 'Tank Low', 'Ambient', 'Solar', 'Collector', 'Tank');
     DoDebug : boolean = false;      // Might be set in raspicapture.lpr
@@ -341,7 +344,7 @@ begin
         ReadDevice(Dev);
 end;
 
-function PopulateSensorArray(var DataArray : TSensorArray) : integer;
+function PopulateSensorArray(var DataArray : TSensorArray; NotRaspi : boolean) : integer;
 var
     Index : integer;
     Info : TSearchRec;
@@ -353,32 +356,38 @@ var
         DataArray[Index].Name := Name;
         DataArray[Index].Value := V;
         DataArray[Index].Present := P;
+        DataArray[Index].Points := 0;
     end;
 
 begin
     // First, the ones we know about
     setlength(DataArray, length(TempSensors));
     for Index := low(TempSensors) to high(TempSensors) do begin
-        AddToDataArray(TempSensors[Index], TempNames[Index], InvalidTemp, False);
+        AddToDataArray(TempSensors[Index], TempNames[Index], 0 {InvalidTemp}, NotRaspi);
+        // On non raspi, make those 5 present for easy testing.
     end;
     // OK, thats the theory, what can we find ?
-        if FindFirst(DEV_PATH + '28-*', faAnyFile and faDirectory, Info)=0 then begin
-        repeat
-            for Index := low(DataArray) to high(DataArray) do begin
-                if DataArray[Index].ID = Info.Name then begin
-                    DataArray[Index].Present := True;
-                    Found := True;
-                    break;
-                end;
+    if not NotRaspi then
+        try
+            if FindFirst(DEV_PATH + '28-*', faAnyFile and faDirectory, Info)=0 then begin
+                repeat
+                    for Index := low(DataArray) to high(DataArray) do begin
+                        if DataArray[Index].ID = Info.Name then begin
+                            DataArray[Index].Present := True;
+                            Found := True;
+                            break;
+                        end;
+                    end;
+                    if Not Found then begin                        // really just for testing ...
+                        setlength(DataArray, length(DataArray) + 1);
+                        Index := high(DataArray);
+                        AddToDataArray(Info.Name, 'Unknown', InvalidTemp, True);
+                    end;
+                until FindNext(Info) <> 0;
             end;
-            if Not Found then begin                        // really just for testing ...
-                setlength(DataArray, length(DataArray) + 1);
-                Index := high(DataArray);
-                AddToDataArray(Info.Name, 'Unknown', InvalidTemp, True);
-            end;
-        until FindNext(Info) <> 0;
-    end;
-    FindClose(Info);
+        finally
+            FindClose(Info);
+        end;
     Result := length(DataArray);        // All may not be present however
 end;
 
