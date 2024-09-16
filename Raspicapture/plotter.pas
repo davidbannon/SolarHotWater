@@ -61,6 +61,7 @@ type
       PlotLabels : TPlotLabelArray;
       PlotColours : TFPColorArray;
       PlotLabelNumb : integer;
+      MaxPlots : integer;              // Index of last columns of analogue data we have to plot, 0..MaxPlots
       procedure AdjustLableSpacing();
       procedure fFullFileName(FFname : string);
       procedure DrawAxis();
@@ -81,7 +82,7 @@ per datapoint, 20x24=480 pixels wide, 80 pixels either side for margin, labels.
 Temp range between -10 and +70 degress, 80, 5 pixels per degree, 400 high plus
 40 pixel margin top and bottom.
 
-Data loks like this, one row every time interval, at least five data data columns
+Data looks like this, one row every time interval, at least five data data columns
 Note the InvalidTemps at 22:43 -
 
 22:37,37083,22020,25437,21166,24291
@@ -89,7 +90,15 @@ Note the InvalidTemps at 22:43 -
 22:43,-308666,-318750,-316375,-319125,-317208
 22:46,36958,21791,25437,20999,24125
 22:49,36875,21708,25437,20770,24083
+13:28,43374,21291,41166,16458,57395,1,0,34150,44931,OFF
+13:31,43145,21562,41354,16145,52520,0,0,49655,44970,COLLECTHOT
+13:37,42770,21937,41812,16416,57500,1,0,38189,45383,
 
+at 13:28 we have Ctrl Data and Pump is OFF
+at 13:31 we also have Ctrl Data, Pump is on
+at 13:37 Ctrl Data but pump state is undefined, assume off
+
+for now, we will start showing a sixth plot line, Collector Temp, item [8] remembering it may not be there.
 }
 
 implementation
@@ -107,7 +116,8 @@ const
 constructor TPlot.Create();
 begin
     if DoDebug then writeln('TPlot.Create - Create.');
-    PlotColours := TFPColorArray.Create(colRed, colDkGreen, colBlue, colMaroon, colMagenta);
+                                // packages/fcl-image/src/fpcolors.inc, colSilver,
+    PlotColours := TFPColorArray.Create(colRed, colDkGreen, colBlue, colMaroon, colMagenta, colOlive);
     if DoDebug then writeln('TPlot.Create - Create Done.');
 end;
 
@@ -218,7 +228,7 @@ function TPlot.LoadFile(FFileName: string): integer;
 // ToDo : this needs a lot more error checking !
 // Incoming data file line is comma seperated and potentially several formats -
 // time,t0,T1,T2,T3,T4,[p,h,|T5,p,h][,CTemp,TTemp,Pump]
-// So, we always have 5 temp reading, even in test mode (where they aree invalid)
+// So, we always have 5 temp reading, even in test mode (where they are invalid)
 // We might have one more ignored test temp. (Temps are a long int, in milli degrees.)
 // Then we have single char Pump and Heater (0 indicating its on).
 // Then we might have three more items, Collector and Tank temp *.nn and then pump state string
@@ -232,8 +242,9 @@ var
     StL : TstringList;
     i : integer;
 begin
+    MaxPlots := 4;                 // default, an index, 0..4, until proven otherwise.
     if DoDebug then writeln('TPlot.LoadFile - opening ', FFileName);
-    setlength(DataArray, 500);   // Thats a full day at 3 minute datapoints,
+    setlength(DataArray, 500);     // Thats a full day at 3 minute datapoints,
     AssignFile(F, FFileName);
     reset(F);
     StL := TstringList.Create;
@@ -247,6 +258,7 @@ begin
         for i := 0 to 4 do
             DataArray[Result].Data[i] := strtoint(Stl[i+1]);     // +1 because first element is Time
         // OK, after here format may change. If there are six temps, ignore #6
+        // So, jump (i) to point to, initially Pump ch.
         case Stl.Count of                                        // must set it to Pump index
             8, 11 : i := 6;
             9, 12 : i := 7;                                      // Skip over testing temp entry
@@ -260,12 +272,19 @@ begin
         DataArray[Result].Heater := Stl[i][1];
         inc(i);                              // if i points to valid date, we have ctrldata too
         if i < StL.Count then begin          // if count = 9, last legal index is 8
-            DataArray[Result].Data[i] := strtoint(Stl[5]);        // Collector
-            inc(i);                                               // Tank
-            DataArray[Result].Data[i] := strtoint(Stl[6]);
-         end;                                                     // We are not using, now, Pump
+           if Stl[i] = '' then
+                DataArray[Result].Data[i-3] := 0
+           else
+                DataArray[Result].Data[i-3] := strtoint(Stl[i]);        // Collector
+           inc(i);                                               // Tank
+           if Stl[i] = '' then
+                DataArray[Result].Data[i-3] := 0
+           else
+                DataArray[Result].Data[i-3] := strtoint(Stl[i]);
+            MaxPlots := 5;                                        // ie, 0..5 inclusive, 6 lines, not inc Ctrl Tank
+         end;                                                     // We are not using, now, Ctrl Pump
         inc(Result);
-        if Result >= 500 then break;       // Thats an error, data set is bigger than expected.
+        if Result >= 500 then break;         // Thats an error, data set is bigger than expected.
     end;
     CloseFile(F);
     STl.Free;
@@ -282,7 +301,9 @@ var
     X : integer = 0;
 begin
     Canvas.pen.style   := psSolid;
-    Canvas.Pen.width := 3;
+    if Column < 5 then
+        Canvas.Pen.width := 3
+    else Canvas.Pen.width := 1;
     Canvas.Pen.FPColor := PlotColours[Column];
     for i := 0 to NumbDataRows-1 do begin
         if (X <> 0) or (Y <> 0) then
@@ -299,11 +320,12 @@ begin
              Canvas.DrawPixel(OriginX+i, HeaterY, colBlack);   }
     end;
     if DoDebug then writeln('TPlot.DrawPlot : NDR=', NumbDataRows, ' C=', Column);
-    i := InsertLabel(OriginY-(DataArray[NumbDataRows-1].Data[Column] div 200));
-    PlotLabels[i].Name := TempNames[Column];
-    PlotLabels[i].YPlot := OriginY-(DataArray[NumbDataRows-1].Data[Column] div 200);
-    PlotLabels[i].Colour := PlotColours[Column];
-
+    if Column < MaxPlots then begin                                              // todo : remove this temp hack !!
+        i := InsertLabel(OriginY-(DataArray[NumbDataRows-1].Data[Column] div 200));
+        PlotLabels[i].Name := TempNames[Column];
+        PlotLabels[i].YPlot := OriginY-(DataArray[NumbDataRows-1].Data[Column] div 200);
+        PlotLabels[i].Colour := PlotColours[Column];
+    end;
 end;
 
 procedure TPlot.fFullFileName(FFname: string);
@@ -314,9 +336,9 @@ begin
      fFFileName := FFName;
      DrawAxis();
      NumbDataRows := LoadFile(FFName);
-     for i := 0 to 4 do
+     for i := 0 to MaxPlots do                  // draw the line
         DrawPlot(i);
-     AdjustLableSpacing();
+     AdjustLableSpacing();                      // now, the labels
      for i := 0 to 4 do begin
          Canvas.Font.FPColor := PlotLabels[i].Colour;
          canvas.TextOut(OriginX + (PPH*25)+5, PlotLabels[i].YText, PlotLabels[i].Name);

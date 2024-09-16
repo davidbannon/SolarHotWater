@@ -112,6 +112,11 @@
         <Filename Value="isock.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit>
+      <Unit>
+        <Filename Value="raspi_utils.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="Raspi_Utils"/>
+      </Unit>
     </Units>
   </ProjectOptions>
   <CompilerOptions>

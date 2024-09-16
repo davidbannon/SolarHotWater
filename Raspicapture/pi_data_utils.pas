@@ -2,346 +2,92 @@ unit pi_data_utils;
 
 {$mode objfpc}{$H+}
 
-// cat /sys/bus//w1/devices/28-00000400bce7/temperature 
-// 25000
-// https://simonprickett.dev/controlling-raspberry-pi-gpio-pins-from-bash-scripts-traffic-lights/
+
+// Has a couple of raspi specific functions but probably sensible to move them
+// back into main raspicapture unit.
+
+// Totally off topic ----
+
+//        I'd like to use the same port control code to control the Water system
+//        but it needs to change hardware so that it defaults to off -
+//        * On power up, ports are unexported, in a high impedeance state
+//        * To use them, we first export, then write in or out to direction
+//        * Can provide pull up resistor.
+
+
+// Currently, the Water app has water turned ON at power on, relies on a script
+// to force them off.
+
+
+
 {$WARN 6058 off : Call to subroutine "$1" marked as inline is not inlined}
 
 interface
 
 uses
- Sysutils, unix;
+ Sysutils, unix, Raspi_Utils;
 
 const
-    //FFNAME = '/sys/bus//w1/devices/28-00000400bce7/temperature';
-    DEV_PATH = '/sys/bus/w1/devices/';
-    PIN_PATH = '/sys/class/gpio/';
     PIN_HW_PUMP = '17';           // Board Pin 11       (test=LED) HW_PUMP
     PIN_HW_HEATER = '22';         // Board Pin 15       Switch
     PIN_WATER_1 = '25';           // Board Pin 22
     PIN_WATER_2 = '8';            // Board Pin 24
+    // 17, 22, 25 and 8 are GPIO numbers, ie Broadcom
+    // 11, 15, 22, 24 are numbers on the board's header.
     // Above numbers are GPIO, Broardcom numbers. The Px numb are header no.
     InvalidTemp=-1000000;           // An unset sensor temperature
 
-type TRaspiPortControl=(RaspiPortRead, RaspiPortWrite, RaspiPortReset);
-
-                        // These are returned by ControlPort(), may indicate port is
-                        // ready to use and whether you should reset port at completion
-type TRaspiPortStatus = (RaspiPortSuccess,  // Port was available, now set as requested
-                        RaspiPortAlready,   // Port was already set as requested
-                        RaspiPortWrong,     // Port was and is still set to wrong mode
-                        RaspiPortNoSet,     // Port looks OK but we cannot set it ???
-                        RaspiPortNoIO,      // Error accessing ports, possibly no I/O hardware
-                        RaspiPortNoAccess); // Errro accessing ports, possibly permissions issue
-
-type TCtrlData = record
+(* type TCtrlData = record
     Collector : longint;
     Tank : longint;
     Pump : string;
     Valid : boolean;
-    end;
-
-type
-  //PSensorRec = ^TSensorRec;
-  TSensorRec = Record
-        ID : string;    // eg 28-001414a820ff
-        Name : string;  // eg Ambient
-        Value : longint;    // raw numbers from sensor or -1 if invalid, milli degrees C
-        Points : integer;   // number of data points collected for this sensor
-        Present : boolean;  // Is this sensor present ?
-  end;
+    end;     *)
 
 type TSensorArray = array of TSensorRec;
 
                 // Displays, to console, a summary of the sensors right now.
-procedure ShowSensorInformation();
+//procedure ShowSensorInformation();
 
                 // Passed an empty dynamic array, it first puts details of known
                 // sensors in it, then looks at all available sensors marking any
                 // it finds as present. This may include the know one and any others.
 function PopulateSensorArray(var DataArray : TSensorArray; NotRaspi : boolean) : integer;
 
-                // Reads the temperature from indicated device. As bad reads not uncommon
-                // we will try again if necessary, this produces a close to 100% result.
-                // Most likely failure is read returns an empty string, just re-read.
-                // Less frequently, FileExits() says its not there, try again.
-                // Data returned is an integer representing milli degrees C, InvalidTemp
-                // means something still managed to go wrong.
-function ReadDevice(DName : string) : integer;
-
-                // Must call this before using a port (PortNo, RaspiPortRead|RaspiPortWrite)
-                // and before exiting (PortNo,  RaspiPortReset).
-function ControlPort(PortNo : string; AnAction : TRaspiPortControl) : TRaspiPortStatus;
-
-function ReadRaspiPort(Port : string; out Value : char) : boolean;
-
-                // Returns True if the Port can be accessed and returns with its state, 'in', 'out', '';
-                // If True and State = '' then the port is 'unexported', ie, not in use.
-                // If it ret False, an error, reason is in State ('no gpio' or 'no access')
-function TestRaspiPort(PortNo : string; out State : string) : boolean;
+procedure WriteLog(msg: string);    // writes a date stamped log.
 
 var
-    DevArray : TStringArray;
-    Dev : string;
-                                    // an array of the 5 sensors we know should be present on Raspi
-                                    // on x86_64 we mark these Present, just a little lie to test
+//    DevArray : TStringArray;        // An array of full path to each DS18B20 temp sensor found.
+//    Dev : string;
+                                    // an array of the 5 sensors we know should be present on my Raspi
+                                    // on x86_64 we auto mark these Present, just a little lie to test
     TempSensors : array of string = ('28-001414a820ff', '28-0014154270ff', '28-0014153fc6ff', '28-000004749871', '28-001414af48ff');
     TempNames : array of string = ('Hot Out', 'Roof', 'Tank Low', 'Ambient', 'Solar', 'Collector', 'Tank');
     DoDebug : boolean = false;      // Might be set in raspicapture.lpr
-    CtrlDataArray : array [0..2] of TCtrlData;
-    LockedBySocket : boolean = false;
-    LockedByCapture : boolean = false;
+//    CtrlDataArray : array [0..2] of TCtrlData;
+    LockedBySocket : boolean = false;         // rough and ready locking, socket has access
+    LockedByCapture : boolean = false;        // rough and ready locking, capture code has access
 
 implementation
 
-function ReadFromFile(const FFName : string; out ch : char) : boolean;
+procedure WriteLog(msg: string);           // ToDo : hardwired user name
 var
+    FFileName : string = '';
     F : TextFile;
 begin
-    if not FileExists(FFname) then begin
-        writeln('pi_data_util ReadFromFile - ERROR : port file ' + FFName + ' - does not exist');
-        //if Application.HasOption('D', 'debug') then
-        //    writelog('pi_data_util ReadFromFile - ERROR : port file ' + FFName + ' - does not exist');
-        exit(False);
-    end;
-    Result := True;
-    AssignFile(F, FFName);
-    try try
-        reset(F);
-        readln(F, Ch);
-    except
-        on E: EInOutError do begin
-            writeln('pi_data_util ReadFromFile - ERROR : ' + FFName + ' - ' +  E.Message);
-            result := False;
-        end;
-    end;
-    finally
-        closeFile(f);
-    end;
-end;
-
-const MAX_REWRITE_TRIES=10;
-
-function writeToFile(const FFName, Content : string) : boolean;
-var
-    F : TextFile;
-    Tries : integer = 0;
-    ErrorNo : integer;
-begin
-    {$I-}
-    Result := True;
-    AssignFile(F, FFName);
-    while Tries < MAX_REWRITE_TRIES do begin
-        rewrite(F);
-        ErrorNo := IOResult;
-        if ErrorNo=0 then break;
-        inc(Tries);
-        sleep(10*Tries);
-    end;
-    if Tries = MAX_REWRITE_TRIES then begin
-        result := False;
-        writeln('I/O ERROR Code ' + inttostr(ErrorNo) + ' ' + FFName);
-    end else begin
-        write(F, Content);
-        closeFile(f);
-    end;
-    {$I+}
-end;
-
-function SetGPIO(GpioNo : string; Input : boolean) : boolean;
-begin
-    result := false;
-    // writeln('SetGPIO Testing ' + PIN_PATH + 'gpio' + GpioNo);
-    if not DirectoryExists(PIN_PATH + 'gpio' + GpioNo) then begin
-        writeln('Exporting GPIO ' + GpioNo);
-        Result := writeToFile(PIN_PATH + 'export', GpioNo);
-    end else Result := True;
-    if not DirectoryExists(PIN_PATH + 'gpio' + GpioNo) then begin
-        writeln('Failed to export to ' + PIN_PATH + 'gpio' + GpioNo);
-        exit(False);
-    end;
-//    sleep(100);              // 30mS is not enough.
-    if Result then 
-        if Input then
-            Result := WriteToFile(PIN_PATH + 'gpio' + GpioNo + '/' + 'direction', 'in')
-        else Result := WriteToFile(PIN_PATH + 'gpio' + GpioNo + '/' + 'direction', 'out');
-    // Note: after export, a Pin is 'in', so possibly don't need to set it.
-end; 
-
-function UnSetGPIO(GpioNo : string) : boolean;
-begin
-    if not DirectoryExists(PIN_PATH + 'gpio' + GpioNo) then begin
-        writeln('Export does not exit ' + PIN_PATH + 'gpio' + GpioNo);
-        exit(False);
-    end;
-    Result := writeToFile(PIN_PATH + 'unexport', GpioNo);
-    if DirectoryExists(PIN_PATH + 'gpio' + GpioNo) then begin
-        writeln('Export has not gone away ! ' + PIN_PATH + 'gpio' + GpioNo);
-        exit(False);
-    end;
-end;
-
-
-function TestRaspiPort(PortNo : string; out State : string) : boolean;
-var
-   F : TextFile;
-   //St : string;
-begin
-    State := 'no gpio';
-    if not DirectoryExists(PIN_PATH) then exit(false);                          // if past here, gpio must exist
-    State := '';
-    if not DirectoryExists(PIN_PATH + 'gpio' + PortNo) then exit(true);         // port unexported
-    AssignFile(F, PIN_PATH + 'gpio' + PortNo +'/direction');
-    result := true;
-    try try
-       reset(F);
-       readln(F, State);
-    except
-       on E: EInOutError do begin
-           State := 'no access';
-           // writeln('pi_data_util ReadFromFile - ERROR : ' + FFName + ' - ' +  E.Message);
-           result := False;
-       end;
-   end;
-   finally
-       closeFile(F);
-   end;
-end;
-
-
-
-
-{ Raspi i/o Ports are initially 'unexported', we setup one by writing its port number
-to /sys/class/gpio/export and then write write either in or out to
-/sys/class/gpioNN/direction. When done, we write the port number to /sys/class/gpio/unexport
-}
-
-// Must call this before using a port (PortNo, RaspiPortRead|RaspiPortWrite)
-// and before exiting (PortNo,  RaspiPortReset). Public Function.
-function ControlPort(PortNo : string; AnAction : TRaspiPortControl) : TRaspiPortStatus;
-var
-   State, Intended : string;
-begin
-    if not TestRaspiPort(PortNo, State) then begin
-        if State = 'no access' then exit(RaspiPortNoAccess)
-        else exit(RaspiPortNoIO);
-    end;
-    // OK, we can access the ports, State maybe '', 'in' or 'out'
-    if AnAction = RaspiPortReset then begin
-        if State = '' then exit(RaspiPortAlready);
-        writeToFile(PIN_PATH + 'unexport', PortNo);
-        if DirectoryExists(PIN_PATH + 'gpio' + PortNo) then
-            exit(RaspiPortNoSet)
-        else exit(RaspiPortSuccess);
-    end else begin                                  // must be either RaspiPortRead RaspiPortWrite
-        if AnAction = RaspiPortRead then
-            Intended := 'in'
-        else Intended := 'out';
-        if State = Intended then exit(RaspiPortAlready);
-        if (State = '') then begin
-            writeToFile(PIN_PATH + 'export', PortNo);      // Export will create the target dir
-            if WriteToFile(PIN_PATH + 'gpio' + PortNo + '/' + 'direction', Intended) then
-                exit(RaspiPortSuccess)
-            else exit(RaspiPortNoSet);
-        end;
-    end;
-    result := RaspiPortWrong;         // its already set and but set to what we want
-end;
-
-function ReadRaspiPort(Port : string; out Value : char) : boolean;
-// The Value comes back as 0 if port is low (ie pump or heater is on).
-begin
-    Result := ReadFromFile(PIN_PATH + 'gpio' + Port + '/value', Value);
-    if not Result then Value := '-';
-end;
-
-function GetDevices(out DevArray: TStringArray) : integer;
-var
-    Info : TSearchRec;
-begin
-    Result := 0;
-    setlength(DevArray{%H-}, Result);
-    if FindFirst(DEV_PATH + '28-*', faAnyFile and faDirectory, Info)=0 then begin
-        repeat
-            inc(Result);
-            setlength(DevArray, Result);    // Yeah, I know, slow. But only 4 or so calls.
-            DevArray[Result-1] := DEV_PATH+Info.Name;
-        until FindNext(Info) <> 0;
-    end;
-    FindClose(Info);
-end;    
-
-
-function ReadDevice(DName : string) : integer;
-var
-    InFile: TextFile;
-    st : string;
-    FFileName : string;
-
-    procedure DoTheRead();
-    begin
-        if FileExists(FFileName) then begin
-            AssignFile(InFile, FFileName);
-            try
-                reset(InFile);
-                readln(InFile, St);
-                if St = '' then begin         // its not unusual for a read to fail
-                    reset(InFile);            // in almost all cases, a reading again is succeessful
-                    readln(InFile, St);
-                end;
-                closeFile(InFile);
-            except
-                on E: EInOutError do begin
-                    writeln('File Error when reading ' + DNAme + ' : ' + E.Message);
-                    Result := InvalidTemp;
-                    exit;
-                end;
-            end;
-            if St = '' then begin
-                Result := InvalidTemp;
-                // writeln('ReadDevice - empty string');
-            end
-            else
-                Result := strtoint(St);         // Brave ! No error check ?
-        end else  Result := InvalidTemp;
-    end;
-
-begin
-    if pos('sys', DName) < 1 then
-        DName := DEV_PATH + DName;
-    FFileName := DName + '/' + 'temperature';
-    DoTheRead();
-    if Result = InvalidTemp then
-        DoTheRead();
-    if Result = InValidTemp then
-        writeln(DateTimeToStr(now()) + ' ReadDevice file does not exist' + FFileName);
-end;
-
-procedure UsePorts();                   // Just a test function
-var
-    Count : integer = 0;
-    Value : char;
-begin
-    while Count < 20 do begin
-        writeToFile(PIN_PATH + 'gpio' + PIN_HW_PUMP + '/value' , '1');
-        if ReadFromFile(PIN_PATH + 'gpio' + PIN_HW_HEATER + '/value', Value)
-            then writeln('Value is ' + Value)
-        else writeln('Error Reading');
-        sleep(1000);
-        writeToFile(PIN_PATH + 'gpio' + PIN_HW_PUMP + '/value' , '0');
-        if ReadFromFile(PIN_PATH + 'gpio' + PIN_HW_HEATER + '/value', Value)
-            then writeln('Value is ' + Value)
-        else writeln('Error Reading');
-        sleep(1000);
-        inc(Count);
-    end;
-end;
-
-procedure ShowSensorInformation();
-begin
-    writeln('Found ' + inttostr(GetDevices(DevArray)) + ' devices');
-    for Dev in DevArray do
-        ReadDevice(Dev);
+//    if Application.HasOption('L', 'log_file') then
+//        FFileName := GetOptionValue('d', 'directory')
+//    else
+    if  directoryExists('/home/dbannon/logs/') then
+        FFileName := '/home/dbannon/logs/new_capture.log'
+            else FFileName := 'new_capture.log';
+    AssignFile(F, FFileName);
+    // need a try here ...
+    if FileExists(FFileName) then
+        Append(F)
+    else  Rewrite(F);
+    writeln(F, DateTimeToStr(now()) + ' - ' + Msg);
+    closeFile(F);
 end;
 
 function PopulateSensorArray(var DataArray : TSensorArray; NotRaspi : boolean) : integer;
@@ -364,10 +110,10 @@ begin
     setlength(DataArray, length(TempSensors));
     for Index := low(TempSensors) to high(TempSensors) do begin
         AddToDataArray(TempSensors[Index], TempNames[Index], 0 {InvalidTemp}, NotRaspi);
-        // On non raspi, make those 5 present for easy testing.
+        // On non raspi, make out those 5 are present for easy testing.
     end;
     // OK, thats the theory, what can we find ?
-    if not NotRaspi then
+    if not NotRaspi then                              // double negative, do this if RasPi
         try
             if FindFirst(DEV_PATH + '28-*', faAnyFile and faDirectory, Info)=0 then begin
                 repeat
@@ -394,33 +140,6 @@ end;
 end.
 
 
-(*
-begin
-    writeln('Found ' + inttostr(GetDevices(DevArray)) + ' devices');
-    for Dev in DevArray do
-        ReadDevice(Dev);
-
-    exit;
-
-    if  not SetGPIO(PIN_HEATER_1, False) then                    // LED
-        writeln('Error, failed to SetGPIO ' + PIN_HEATER_1);
-
-    if  not SetGPIO(PIN_HEATER_2, TRUE) then                    // Switch
-        writeln('Error, failed to SetGPIO ' + PIN_HEATER_2);
-
-    UsePorts();
-
-    // readln;
-
-    if not UnSetGPIO(PIN_HEATER_1) then
-        writeln('Error, failed to UnSet');
-
-    if not UnSetGPIO(PIN_HEATER_2) then
-        writeln('Error, failed to UnSet');
-
-
-
-end.*)
 
 
 

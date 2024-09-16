@@ -37,7 +37,7 @@ enum TPumpState {psOff, psCollectHot, psCollectFreeze};
   //#define  BAUD_RATE 115200;
   // ADC_REF_VOLT=2490;      // milliVolts
   // ADC_REF_VOLT=3300;   // milliVolts
-#define  PumpOnDelta       3.0     // Collector has to be this much hotter than tank to turn pump on
+#define  PumpOnDelta       5.0     // Collector has to be this much hotter than tank to turn pump on
 #define  PumpOffDelta      2.0     // Collector has to be this much hotter than tank for Pump to remain on
 #define  MaxTankTemp       90.0    // Don't send any more hot water to tank !
 #define  AntiFreezeTrigger 3.0     // Colder than this, we must pump some warm water up
@@ -51,10 +51,10 @@ enum TPumpState {psOff, psCollectHot, psCollectFreeze};
 #define ADC1 1                     // GP27    use the 0..3 syntax, but when using the
 #define ADC2 2                     // GP28    gpio unit (ie doing init) quote it GP number.
 
-  bool AntiFreezeOn = false;
+//  bool AntiFreezeOn = false;
   enum TPumpState PumpState = psOff;
   int TCP_Count = 0;                     // Only sent a TCP report when this reaches X    
-  
+  bool PumpWasOn = false;
   
 // -------------------------   T C P   C O D E ---------------------------------
 
@@ -270,11 +270,21 @@ float GetExternalTemperature(int8_t SelectADC) {
     } 
 #endif
     // return ((Cnt * 158) / 10) - 259740;      // thats milli degrees   ADJUST THIS !!!!
-    return (((Cnt * 15.8)  - 259740)/1000.0);   // really, really, check this !!!!
+    // return (((Cnt * 15.8)  - 259740)/1000.0);   // really, really, check this !!!!
+    return ((((Cnt/(float)CntsPerReading) * 158.0)  - 259740)/1000.0);
 }
+/*  At 50c, we get 1963 counts with each reading, eg 10 readings, 1963*10*15.8=310154
+    310154 - 259740 = 50414 milli degrees. This function returns whole degrees as a float.
+    
+    50c,  CntsPerReading = 10   Cnt is 19630 at 50c = 50.414c
+    0c,   CntsPerReading = 20,  Cnt is 1644*20  = 12mC 
+    100c, CntsPerReading = 100, Cnt is 227700 = 100.026c
+        
+    return ((((Cnt/(float)CntsPerReading) * 158.0)  - 259740)/1000.0);
+    I could put some active corrections for linearity but thats good enough I think.
+*/
 
-
-void Report(float Collect, float Tank) {
+void Report(float Collect, float Tank) {   // receives temps in degrees
     char PumpSt[] = "CollectFreeze";
     
     switch (PumpState) {
@@ -288,6 +298,7 @@ void Report(float Collect, float Tank) {
             break;
         case psCollectFreeze :
             printf("Pump is ON (freeze), Collector %.2f and Tank %.2f, Count=%d\n", Collect, Tank, TCP_Count);
+            sprintf(PumpSt, "%s", "COLLECTFREEZE");
             break;
         default:
             printf("Pump is OFF but why are we here ?  Collector %f and Tank %f, Count=%d\n", Collect, Tank, TCP_Count);
@@ -295,20 +306,39 @@ void Report(float Collect, float Tank) {
     }
     //printf("Report : count is %d\n", TCP_Count);
     if (TCP_Count > 60) {
-        sprintf(MsgBuff, "%d,%d,%s", (int)(Collect*1000.0), (int)(Tank*1000.0), PumpSt);
+        // ToDo : this shows pump state at this instant, more useful to know if pump was
+        //        ON sometime during the previous cycle ?
+        if (PumpWasOn) {
+            sprintf(MsgBuff, "%d,%d,%s,WasOn", (int)(Collect*1000.0), (int)(Tank*1000.0), PumpSt);
+            PumpWasOn = false;
+        } else {
+            sprintf(MsgBuff, "%d,%d,%s,OFF", (int)(Collect*1000.0), (int)(Tank*1000.0), PumpSt);
+        }
         // Pass an int, being milli degrees C, to be consistent with how capture works.
-        // Note assuming ints on the Pico are greater than 16bit !
+        // Note assuming ints on the Pico are greater than 16bit ! (yeah, 64bit)
         run_tcp_client();
         TCP_Count = 0;
     } else TCP_Count++;
 }    
 
+/* Change Aug 2024, slow down the measure cycle to dampen the wild swings.
+   Collect a number of data points into an accumulator each call and inc a call
+   count. When call count gets to some appropriate number (5 ?) divide each accumulator
+   by that and process (then zero the vars). Requires some globals -
+        float CollectorTotal;
+        float TankTotal;
+        int NumbMeasures;
+        constant NumbPoints = 1..20   The number of points we gather before acting. 
+   1 should be a usable, I cannot imagine more than 20.     
+*/
+
                 // Called repeatedly until power off.
 void ControlLoop() {
     //float CollectorTemp = GetExternalTemperature(1, true);
     //float TankTemp = GetExternalTemperature(0, false);
-    float CollectorTemp = GetExternalTemperature(ADC1);
+    float CollectorTemp = GetExternalTemperature(ADC1);      // gets temp in (float) degrees.
     float TankTemp = GetExternalTemperature(ADC0);
+    enum TPumpState OldPumpState = PumpState;
     switch (PumpState) {
         case psOff :                // if its OFF, we might turn it on
             if (CollectorTemp < AntiFreezeTrigger) 
@@ -328,9 +358,14 @@ void ControlLoop() {
         default :                   // not possible ?  Anyway, we'll set it off.
             PumpState = psOff;
     }                               // end of switch statement.
-    if ((PumpState == psCollectHot) || (PumpState == psCollectFreeze))
-        gpio_put(PumpPort, true);                                // Make it so.
-    else gpio_put(PumpPort, false);
+    if (OldPumpState != PumpState) {            // 'something' seems to trigger a pump 'flash' ?
+        if ((PumpState == psCollectHot) || (PumpState == psCollectFreeze)) {
+            gpio_put(PumpPort, true);           // Make it so.
+            PumpWasOn = true;                   // Report() will reset that.
+        } else {
+            gpio_put(PumpPort, false);
+        }
+    }
     sleep_ms(500); 
     Report(CollectorTemp, TankTemp);
     // sleep_ms(250);
