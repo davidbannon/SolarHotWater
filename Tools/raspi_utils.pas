@@ -24,8 +24,8 @@ const
     // eg '/sys/bus//w1/devices/28-00000400bce7/temperature';
     DEV_PATH = '/sys/bus/w1/devices/';
     PIN_PATH = '/sys/class/gpio/';
-    InvalidTemp=-1000000;           // An unset sensor temperature
-
+    InvalidTemp=-1000000;               // An unset sensor temperature
+    MaxPortNumb = 40;                   // Davo, check this !
 
 type TRaspiPortControl=(RaspiPortRead, RaspiPortWrite, RaspiPortReset);
 
@@ -103,7 +103,7 @@ var
 
 implementation
 
-const MaxPortNumb = 40;   // Davo, check this !
+
 
 function RasPiPortToInt(Port : string) : integer;     // not sure if we need this, raspi_tool has its own, no one else needs it ?
 begin

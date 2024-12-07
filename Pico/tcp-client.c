@@ -57,7 +57,13 @@ enum TPumpState {psOff, psCollectHot, psCollectFreeze};
   bool PumpWasOn = false;
   
 // -------------------------   T C P   C O D E ---------------------------------
-
+// TCP process is
+// Crtl Loop may call run_tcp_client() after putting message in global MsgBuff
+//     it calls init, tcp_client_open() and waits for state->complete.
+//         tcp_client_open() makes a pcp, sets up tcp and calls cyw43_arch_lwip_begin and ~_end;
+//            cyw43_~ calls tcp_connect and pass (address of) tcp_client_connected()
+//               it writes MsgBuf, tcp_output().
+//               ERRORS triggered in tcp_client_connected() do not seem to be caught ??
   
 typedef struct TCP_CLIENT_T_ {
     struct tcp_pcb *tcp_pcb;
@@ -306,7 +312,7 @@ void Report(float Collect, float Tank) {   // receives temps in degrees
     }
     //printf("Report : count is %d\n", TCP_Count);
     if (TCP_Count > 60) {
-        // ToDo : this shows pump state at this instant, more useful to know if pump was
+        
         //        ON sometime during the previous cycle ?
         if (PumpWasOn) {
             sprintf(MsgBuff, "%d,%d,%s,WasOn", (int)(Collect*1000.0), (int)(Tank*1000.0), PumpSt);

@@ -4,6 +4,13 @@ program raspicapture;
 
 { A small command line (needs fpc only) that reads the Paspberry Pi's temp sensors
   and can also plot the resulting cvs files to png images.
+  
+  Note, we need libfreetype here but installing libfreetype6 package will not
+  help because, annother one of FPC errors, it depends, at run time, on 
+  libfreetype6.so - the symlink that should be used only at link time.
+  
+  So, manually make that symlink or install libfreetype-dev !
+  
   I find it easy to use Lazarus on my laptop as the editor, have the working dir
   mounted (using sshfs) on a loggertest pi with the compiler installed.
 
@@ -261,22 +268,22 @@ end;
 // Shows status of ports we are interested in. 0=low. Reports 'unexported' if so.
 procedure Traspicapture.DisplayIOPortList;
 var
-    Ports : TStringArray = ('22', '17', '8', '25');
-    St, State : string;
+    State : string;
     Ch : char;
+    Port : integer;
 begin
-    for St in Ports do begin
-        if not TestRaspiPort(St,  State) then
-            writeln('GPIO ', St, ' does not appear to be valid')
+    for Port in [PIN_HW_PUMP, PIN_HW_HEATER, PIN_WATER_1, PIN_WATER_2] do begin
+        if not TestRaspiPort(Port,  State) then
+            writeln('GPIO ', Port, ' does not appear to be valid')
         else begin
-            if State = '' then writeln('GPIO ', St, ' is unexported, not in use.')
+            if State = '' then writeln('GPIO ', Port, ' is unexported, not in use.')
             else begin
-                if not ReadRaspiPort(St, ch) then
-                    writeln('Error reading port ' + St);
+                if not ReadRaspiPort(Port, ch) then
+                    writeln('Error reading port ', Port);
                 if State = 'in' then
-                    writeln('GPIO ', St, ' is set to IN, value = ', Ch);
+                    writeln('GPIO ', Port, ' is set to IN, value = ', Ch);
                 if State = 'out' then
-                    writeln('GPIO ', St, ' is set to OUT, value = ', Ch);
+                    writeln('GPIO ', Port, ' is set to OUT, value = ', Ch);
             end;
         end;
     end;
