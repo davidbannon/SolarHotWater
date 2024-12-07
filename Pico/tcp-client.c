@@ -1,3 +1,17 @@
+
+/*   Small app for the Raspberry Pi Pico W to control a circulation pump in 
+     in a solar haot water system.
+     Copyright David Bannon
+     License:
+     This code is licensed under MIT License, see https://opensource.org/license/mit
+     or  https://spdx.org/licenses/MIT.html  SPDX short identifier: MIT
+
+     History
+     2024-12-07 Commented out 2 lines from ControlLoop() that prevented updates
+                to PumpWasOn when pump remains on between cycles. Affected only
+                reporting.
+*/
+
 #include <stdio.h>
 #include "pico/stdlib.h"
 #include "pico/cyw43_arch.h"
@@ -18,7 +32,7 @@
 //  Because of setting setting in CMakeList.txt we don't need to use the debug probe.
 //  else Plug in the debug pico to see debug info. 
 
-// char MY_SSID[] = "...     // Please define these in credentials.h
+// char MY_SSID[] = "...";     // Please define these in credentials.h
 // char MY_PASS[] = "...";
 // char TARGET_IP[] = "...";    
 
@@ -363,15 +377,16 @@ void ControlLoop() {
             break;
         default :                   // not possible ?  Anyway, we'll set it off.
             PumpState = psOff;
-    }                               // end of switch statement.
-    if (OldPumpState != PumpState) {            // 'something' seems to trigger a pump 'flash' ?
+    }       // end of switch statement.
+ // WRONG - if Pump is remaining ON, the next line prevents PumpWasOn from being set.                          
+ //   if (OldPumpState != PumpState) {            // 'something' seems to trigger a pump 'flash' ?
         if ((PumpState == psCollectHot) || (PumpState == psCollectFreeze)) {
             gpio_put(PumpPort, true);           // Make it so.
             PumpWasOn = true;                   // Report() will reset that.
-        } else {
+        } else {                                
             gpio_put(PumpPort, false);
         }
-    }
+ //   }
     sleep_ms(500); 
     Report(CollectorTemp, TankTemp);
     // sleep_ms(250);

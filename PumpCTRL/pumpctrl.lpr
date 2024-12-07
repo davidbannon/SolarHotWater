@@ -17,20 +17,22 @@ or  https://spdx.org/licenses/MIT.html  SPDX short identifier: MIT
     * Might read a DS18B20 temp sensor to monitor temp inside its box. (gpio4)
     * Reports its internal status when sent a particular signal.
 
-    Physical Connector to Pi, I need 2x6pin to i/o board.
+    40p Physical Connector to Pi, I need 2x6pin to i/o board.             i/O board
 
-    1      - 3v3
-         2 - 5v
+    1      - 3v3                                                           n.c.
+         2 - 5v                                                            D
     3      - SDA1   (ADS1115)
          4 - 5v
     5      - SCL1   (ADS1115)
-         6 - GND
-    7      - GPIO 4 (1w data line)
-         8 - gpio14  (Switch const current, config out, low=??, high=??
-    9      - GND
-        10 - gpio15 (Ctrl relay, high=relay energised, pump on)
-    11     - gpio17 (LED showing measure cycle)
-        12 - gpio18 (spare)
+         6 - GND                                                           O, G, F
+    7      - GPIO 4 (1w data line)                                         n.c.
+         8 - gpio14  (Switch const I, Hi to Collector, Lo to Tank)         J
+    9      - GND                                                           O, G, F
+        10 - gpio15 (Ctrl relay, high=relay energised, pump on)            N
+    11     - gpio17 (LED showing measure cycle)                            n.c.
+        12 - gpio18 (spare)                                                n.c.
+                                                                         No Connect - E, K
+                                                                         Sensor In  - H, I
 
     An LED in parellal with the relay coil shows pump is on.
     Another LED flashes on/off in each measure cycle.
