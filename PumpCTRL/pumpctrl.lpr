@@ -1,5 +1,11 @@
 program pumpctrl;
 
+{ Copyright David Bannon
+  License:
+This code is licensed under MIT License, see https://opensource.org/license/mit
+or  https://spdx.org/licenses/MIT.html  SPDX short identifier: MIT
+}
+
 { This app uses a Raspberry Pi Zero (2W) to control solar hot water pump.
     * i2c comms with an ADS1115 16bit A/D converter to read two Pt1000 sensors.
       This uses the default i2c pins, gpio2, sda1 and gpio3, scl.

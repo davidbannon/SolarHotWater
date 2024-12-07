@@ -1,5 +1,10 @@
 program simplehttpserver;
 
+{ License
+  This code is an almost identical copy of the same code distributed with FPC and,
+  as such, is covered by the same license as (most?) the rest of FPC.
+}
+
 { this demo, almostly completely unchanged from the $FPC/packages/fcl-web/examples/httpserver
   is ideal to serve up simple web pages on my logger.
   Notes : I needed to copy   ../echo/webmodule/wmecho.*  into dir before building

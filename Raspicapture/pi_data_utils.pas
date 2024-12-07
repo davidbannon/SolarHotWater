@@ -3,6 +3,14 @@ unit pi_data_utils;
 {$mode objfpc}{$H+}
 
 
+{ Copyright David Bannon
+  License:
+  This code is licensed under MIT License, see https://opensource.org/license/mit
+  or  https://spdx.org/licenses/MIT.html  SPDX short identifier: MIT
+}
+
+
+
 // Has a couple of raspi specific functions but probably sensible to move them
 // back into main raspicapture unit. Covers -
 

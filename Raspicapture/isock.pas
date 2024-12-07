@@ -1,6 +1,12 @@
 unit isock;
 {$mode ObjFPC}{$H+}
 
+{ Copyright David Bannon
+  License:
+  This code is licensed under MIT License, see https://opensource.org/license/mit
+  or  https://spdx.org/licenses/MIT.html  SPDX short identifier: MIT
+}
+
 { This unit will provide a thread that will monitor the isocket and respond when
   a message is received. The thread will create a INetServerApp, it sets up all
   the socket infrasture. When a message arrives, OnConnect is called, it reads

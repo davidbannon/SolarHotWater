@@ -2,6 +2,12 @@ unit Raspi_Utils;
 
 {$mode ObjFPC}{$H+}
 
+{ Copyright David Bannon
+  License:
+  This code is licensed under MIT License, see https://opensource.org/license/mit
+  or  https://spdx.org/licenses/MIT.html  SPDX short identifier: MIT
+}
+
 { A library unit that knows how to talk to Raspi Ports and to DS18B20 temp sensor
   devices connected to the Raspi.
   Defines some types to make handling the above a bit easier.

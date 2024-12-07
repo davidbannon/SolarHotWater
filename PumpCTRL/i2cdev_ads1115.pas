@@ -1,5 +1,15 @@
 unit i2cdev_ADS1115;
 
+{ License
+  This code is substantially similar to code found in
+  https://github.com/laz2wiringpi/lazI2cdev
+
+  No copywrite appears to be claimed as near as I can see.
+  The repository is stamped AGPL-3.0 license.
+
+  I intend to log an issue offering the author this unit to add to their repository.
+}
+
 {$mode objfpc}{$H+}
 {$warn 6058 off}      // no warnings about not inlining.
 
@@ -11,6 +21,7 @@ sps_128 needs to be 10mS   (no safety margin applied.
 Correct way to do this is to monitor the ALERT/RDY pin and set it to
 conversion ready pin, see ADS1115 data sheet, 9.3.8 Conversion Ready Pin
 }
+
 interface
 
 uses

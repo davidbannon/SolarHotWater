@@ -1,4 +1,14 @@
 unit i2cdev_base;
+{ License
+  This code is almost identical to code found in
+  https://github.com/laz2wiringpi/lazI2cdev
+
+  No copywrite appears to be claimed as near as I can see.
+  The repository is stamped AGPL-3.0 license.
+
+  (only change is ability to get back raw counts from an ADS instead of a lower
+   resolution volts figure)
+}
 
 {$mode objfpc}{$H+}
 

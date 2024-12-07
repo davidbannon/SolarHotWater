@@ -1,6 +1,11 @@
 unit Plotter;
 
-{$mode ObjFPC}{$H+}
+{ Copyright David Bannon
+  License:
+  This code is licensed under MIT License, see https://opensource.org/license/mit
+  or  https://spdx.org/licenses/MIT.html  SPDX short identifier: MIT
+}
+
 
 { Unit that takes a cvs file full of temperature datapoints (five per row) and plots
 them into a PNG file. Single char (still comma seperated) beyond that are plotted
@@ -9,6 +14,8 @@ in a single horizontal line.
 Depends on pi_data_utils that defines my known sensor IDs and the places they are.
 
 }
+
+{$mode ObjFPC}{$H+}
 
 interface
 

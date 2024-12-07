@@ -1,6 +1,13 @@
 program raspicapture;
 
-{$mode objfpc}{$H+}
+
+{ Copyright David Bannon
+  License:
+  This code is licensed under MIT License, see https://opensource.org/license/mit
+  or  https://spdx.org/licenses/MIT.html  SPDX short identifier: MIT
+}
+
+
 
 { A small command line (needs fpc only) that reads the Paspberry Pi's temp sensors
   and can also plot the resulting cvs files to png images.
@@ -57,7 +64,11 @@ program raspicapture;
   python dependencies.
 
 }
+
+{$mode objfpc}{$H+}
+
 {$WARN 5024 off : Parameter "$1" not used}
+
 uses
     {$IFDEF UNIX}cthreads, {$ENDIF}
     Classes, SysUtils, CustApp, DateUtils, pi_data_utils, Plotter, BaseUnix, Unix,
