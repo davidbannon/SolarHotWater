@@ -9,7 +9,7 @@
      History
      2024-12-07 Commented out 2 lines from ControlLoop() that prevented updates
                 to PumpWasOn when pump remains on between cycles. Affected only
-                reporting.
+                reporting. Now report a % of pump on time.
 */
 
 #include <stdio.h>
@@ -68,7 +68,7 @@ enum TPumpState {psOff, psCollectHot, psCollectFreeze};
 //  bool AntiFreezeOn = false;
   enum TPumpState PumpState = psOff;
   int TCP_Count = 0;                     // Only sent a TCP report when this reaches X    
-  bool PumpWasOn = false;
+  int PumpWasOn = 0;
   
 // -------------------------   T C P   C O D E ---------------------------------
 // TCP process is
@@ -305,20 +305,20 @@ float GetExternalTemperature(int8_t SelectADC) {
 */
 
 void Report(float Collect, float Tank) {   // receives temps in degrees
-    char PumpSt[] = "CollectFreeze";
+    //char PumpSt[] = "CollectFreeze";
     
     switch (PumpState) {
         case psOff :
             printf("Pump is OFF, Collector %.2f and Tank %.2f, Count=%d\n", Collect, Tank, TCP_Count);
-            sprintf(PumpSt, "%s", "OFF");
+            //sprintf(PumpSt, "%s", "OFF");
             break;
         case psCollectHot :
             printf("Pump is ON (hot), Collector %.2f and Tank %.2f, Count=%d\n", Collect, Tank, TCP_Count);
-            sprintf(PumpSt, "%s", "COLLECTHOT");
+            //sprintf(PumpSt, "%s", "COLLECTHOT");
             break;
         case psCollectFreeze :
             printf("Pump is ON (freeze), Collector %.2f and Tank %.2f, Count=%d\n", Collect, Tank, TCP_Count);
-            sprintf(PumpSt, "%s", "COLLECTFREEZE");
+            //sprintf(PumpSt, "%s", "COLLECTFREEZE");
             break;
         default:
             printf("Pump is OFF but why are we here ?  Collector %f and Tank %f, Count=%d\n", Collect, Tank, TCP_Count);
@@ -326,16 +326,9 @@ void Report(float Collect, float Tank) {   // receives temps in degrees
     }
     //printf("Report : count is %d\n", TCP_Count);
     if (TCP_Count > 60) {
-        
-        //        ON sometime during the previous cycle ?
-        if (PumpWasOn) {
-            sprintf(MsgBuff, "%d,%d,%s,WasOn", (int)(Collect*1000.0), (int)(Tank*1000.0), PumpSt);
-            PumpWasOn = false;
-        } else {
-            sprintf(MsgBuff, "%d,%d,%s,OFF", (int)(Collect*1000.0), (int)(Tank*1000.0), PumpSt);
-        }
-        // Pass an int, being milli degrees C, to be consistent with how capture works.
-        // Note assuming ints on the Pico are greater than 16bit ! (yeah, 64bit)
+        sprintf(MsgBuff, "%d,%d,%d", (int)(Collect*1000.0), (int)(Tank*1000.0), (int)((PumpWasOn*100)/TCP_Count));
+        PumpWasOn = 0;     
+        // Pass temperature as ints, being milli degrees C, to be consistent with how capture works.
         run_tcp_client();
         TCP_Count = 0;
     } else TCP_Count++;
@@ -382,7 +375,7 @@ void ControlLoop() {
  //   if (OldPumpState != PumpState) {            // 'something' seems to trigger a pump 'flash' ?
         if ((PumpState == psCollectHot) || (PumpState == psCollectFreeze)) {
             gpio_put(PumpPort, true);           // Make it so.
-            PumpWasOn = true;                   // Report() will reset that.
+            PumpWasOn = PumpWasOn + 1;                   // Report() will reset that.
         } else {                                
             gpio_put(PumpPort, false);
         }

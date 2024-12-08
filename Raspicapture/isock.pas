@@ -15,7 +15,12 @@ unit isock;
   if lock is successful, will update array. If
   lock is unsuccessful, no problem, drop data on floor.
   CtrlDataArray, LockedBySocket and LockedByCapture are in pi_data_Utils.
+  The message is three comma seperated integers.
+  ,CollectorTemp,TankTemp,%Pump     (temps are in milli degrees, % in percentage points)
 
+
+  History :
+    2024-12-08  Now using data from PumpCtrl, now percent based.
 }
 
 interface
@@ -31,8 +36,7 @@ const
 type TCtrlData = record
     Collector : longint;
     Tank : longint;
-    Pump : string;
-    PumpWas : string;
+    PercentPump : integer;
     Valid : boolean;
     end;
 
@@ -155,10 +159,10 @@ var
     i : integer = 1;
 //    SubSt : string = '';
 //    Stage : integer = 1;
-    LongArray : array [0..1] of longint;
+    LongArray : array [0..2] of longint;
     StArray : TStringArray;
 
-    procedure UpdateCtrlArray(PumpSt, WasSt : string);
+    procedure UpdateCtrlArray();
     begin
         EnterCriticalSection(SocketCriticalSection);
         try
@@ -166,19 +170,22 @@ var
 //                writeln('ERROR UpdateCtrlArray - Unable to lock CtrlDataArray, OK');
 //                exit;
 //            end;
+            if LongArray[2] > 100 then LongArray[2] := 100;                     // bug in ctrl sometimes gives 101%
+            if DoDebug then writelog('NOTICE : TINetServerApp.ProcessMessage UpdateCtrlArray - looking for a slot '
+                    + LongArray[0].ToString + ' ' + LongArray[1].ToString + ' ' + LongArray[1].ToString);
             while LockedByCapture do sleep(20);
             LockedBySocket := True;
             i := 0;
-            if DoDebug then writelog('NOTICE : TINetServerApp.ProcessMessage UpdateCtrlArray - looking for a slot '
-                    + LongArray[0].ToString + ' ' + LongArray[1].ToString + ' ' + PumpSt);
             while i < 3 do begin
                 if not CtrlDataArray[i].Valid then begin
-                     CtrlDataArray[i].Pump := PumpSt;
-                     CtrlDataArray[i].PumpWas := WasSt;
-                     CtrlDataArray[i].Collector := LongArray[0];
-                     CtrlDataArray[i].Tank := LongArray[1];
+                     //CtrlDataArray[i].Pump := PumpSt;
+                     //CtrlDataArray[i].PumpWas := WasSt;
+                     CtrlDataArray[i].Collector   := LongArray[0];
+                     CtrlDataArray[i].Tank        := LongArray[1];
+                     CtrlDataArray[i].PercentPump := LongArray[2];
                      CtrlDataArray[i].Valid := True;
                      if DebugSock then writelog('NOTICE : TINetServerApp.ProcessMessage - found a slot');
+                     // writeln('iSock -  UpdateCtrlArray. PercentPump is ', LongArray[2]);
                      break;
                 end;
                 inc(i);
@@ -191,39 +198,17 @@ var
     end;
 
 begin
-(*    if DebugSock then writelog('NOTICE : isock : processing message');
-    while i < Mesg.Length do begin
-        if Stage < 3 then begin                         // Stage one and two are strings that should convert to int
-            if Mesg[i] in [ '0'..'9'] then
-                SubSt := SubSt + Mesg[i]                // collect char, one by one.
-            else if Mesg[i] = ',' then begin            // hit seperator, process !
-                if not TryStrToInt(SubSt, LongArray[Stage-1]) then break;
-                // writeln('TINetServerApp.ProcessMessage - Stage=', Stage, ' Long=', LongArray[Stage-1]);
-                inc(Stage);
-                SubSt := '';
-            end else break;              // invalid data
-            inc(i);
-            continue;
-        end else begin                   // now pointing to string at end, deal with it.
-            // writeln('TINetServerApp.ProcessMessage - calling updateCtrlArray ', LongArray[0], ' ', LongArray[1]);
-            UpdateCtrlArray(copy(Mesg, i, 20));  // Pump State < 20
-            exit;
-        end;
-    end;                                 // below here because of invalid data
-    writelog('ERROR : TINetServerApp.ProcessMessage - bad CtrlData string [' + Mesg + ']');         *)
-
     StArray := Mesg.Split(',');
     if length(StArray) > 2 then begin          // Not much of a sanity check but ...
         if TryStrToInt(StArray[0], LongArray[0])
-            and TryStrToInt(StArray[1], LongArray[1]) then begin                // OK, we have the two numbers.
-                if  length(StArray) > 3 then
-                    UpdateCtrlArray(StArray[2], StArray[3])
-                else
-                    UpdateCtrlArray(StArray[2], '');
+            and TryStrToInt(StArray[1], LongArray[1])
+            and TryStrToInt(StArray[2], LongArray[2])
+            then begin                // OK, we have the three numbers.
+                    UpdateCtrlArray();        // don't need those parameters
                 exit;
             end;
     end;
-    // Only get to here is things have gone hopelessly wrong.
+    // Only get to here if things have gone hopelessly wrong.
     writelog('ERROR : TINetServerApp.ProcessMessage - bad CtrlData string [' + Mesg + ']');
 end;
 

@@ -534,31 +534,29 @@ var i : integer = 0;
 begin
     D.Collector := 0;
     D.Tank  := 0;
-    D.Pump  := 'OFF';
-    D.PumpWas := 'OFF';
+    D.PercentPump := 0;;
     D.Valid := false;
     while I < 3 do begin
         if CtrlDataArray[i].Valid then begin
             D.Collector += CtrlDataArray[i].Collector;
             D.Tank += CtrlDataArray[i].Tank;
-            if CtrlDataArray[i].Pump <> 'OFF' then
-                D.Pump := CtrlDataArray[i].Pump;       // we show Pump On when any one datapoint in array is ON
-            if CtrlDataArray[i].PumpWas <> 'OFF' then
-                D.PumpWas := CtrlDataArray[i].PumpWas;        // as above, means pump was on, however breifly, during whole cycle
+            D.PercentPump += CtrlDataArray[i].PercentPump;
+            // writeln('Traspicapture.AverageCtrlData - D=', D.PercentPump, ' and CDA=', CtrlDataArray[i].PercentPump);
             D.Valid := True;
             CtrlDataArray[i].Collector := 0;
             CtrlDataArray[i].Tank := 0;
+            CtrlDataArray[i].PercentPump := 0;
             CtrlDataArray[i].Valid := False;
-            CtrlDataArray[i].Pump := 'OFF';           // Pump state when ctrl data was sent
-            CtrlDataArray[i].PumpWas := 'OFF';        // If not OFF, means pump was on some time during previous cycle
-        end else break;
+         end else break;
         inc(i);
     end;
     result := i;
     if i > 1 then begin            // 2 or 3
         D.Collector := D.Collector div i;
         D.Tank := D.Tank div i;
+        D.PercentPump := D.PercentPump div i;
     end;
+    // writeln('Traspicapture.AverageCtrlData - D.PercentPump ', D.PercentPump);
 end;
 
 procedure Traspicapture.ZeroCtrlData();
@@ -568,7 +566,8 @@ begin
         CtrlDataArray[i].Collector := 0;
         CtrlDataArray[i].Tank := 0;
         CtrlDataArray[i].Valid := False;
-        CtrlDataArray[i].Pump := 'OFF';
+        CtrlDataArray[i].PercentPump := 0;
+        //CtrlDataArray[i].Pump := 'OFF';
     end;
 end;
 
@@ -588,8 +587,8 @@ begin
             writeln(Points, ' solar control points available');
     DataSt := DataSt + ',' + inttostr(Data.Collector);
     DataSt := DataSt + ',' + inttostr(Data.Tank);
-    DataSt := DataSt + ',' + Data.Pump + '+' + Data.PumpWas;     // will be either "OFF" or "COLLECTHOT" as set in Pico code
-                                            // NOTE : the plotter currently ignores content in the last two fields.
+    DataSt := DataSt + ',' + inttostr(Data.PercentPump);
+
 end;
 
 
