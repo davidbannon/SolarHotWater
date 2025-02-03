@@ -29,6 +29,7 @@ type
         destructor Destroy; override;
         procedure WriteHelp; virtual;
         function PortOptionToInt(Opt : char) : integer;
+        procedure KeepReadingTemp(Sec : integer);
     end;
 
 { TRasPiTool }
@@ -57,6 +58,38 @@ begin
     end;
 end;
 
+
+const
+  NumbReads = 4;    // number of times we read each sensor for one reading
+
+procedure TRasPiTool.KeepReadingTemp(Sec : integer);
+var
+    Devs : TStringArray;
+    Dev : string;
+    Value : longint;
+    i : integer;
+begin
+    GetDS18B20Devices(Devs);
+    write('           ');
+    for Dev in Devs do
+        write(Dev.Remove(1, 30), '     ');
+    writeln('');
+    while true do begin
+        write(timetostr(now), '   ');
+        for Dev in Devs do begin
+            Value := 0;
+            for i := 0 to 4 do
+                Value := Value + ReadDS18B20(Dev);
+            write((Value div (NumbReads+1)) div 1000, '     ');
+        end;
+        writeln('');
+        if Sec > 10 then
+            sleep((Sec-10) * 1000);        // with no sleep, about 10 sec a line
+    end;
+
+    Terminate;         // never get here
+end;
+
 procedure TRasPiTool.DoRun;
 var
     ErrorMsg : String;
@@ -65,7 +98,7 @@ var
     Res : TRaspiPortStatus;
 begin
     // quick check parameters
-    ErrorMsg := CheckOptions('hlr:s:S:c:t:', 'help');
+    ErrorMsg := CheckOptions('hlp:s:S:c:t:r:', 'help');
     if ErrorMsg <> '' then begin
         // ShowException(Exception.Create(ErrorMsg));
         writeln(ErrorMsg);
@@ -86,6 +119,10 @@ begin
         exit;
     end;
 
+    if HasOption('r') then begin
+        KeepReadingTemp(PortOptionToInt('r'));       // does not return
+    end;
+
     // Below here, gpio functions.
 
     if RasPi_Utils_Error <> '' then begin
@@ -96,8 +133,8 @@ begin
 
 
 
-    if HasOption('r') then begin
-//        Port := GetOptionValue('r');
+    if HasOption('p') then begin
+//        Port := GetOptionValue('p');
 //        writeln('Port gpio' + Port + ' = ' + booltostr(SetRasPiPort(Port), true));
         Terminate;
         exit;
@@ -169,7 +206,8 @@ begin
     writeln('This tool requires w1_gpio and w1_therm kernel modules.');
     writeln(' -l       List Temp Sensors Present');
     writeln(' -t  28-...  Show a Sensor Temperature');
-    writeln(' -r  port Read gpio port status.');
+    writeln(' -r  sec  Read and keep reading temp sensors at sec seconds interval');
+    writeln(' -p  port Read gpio port status.');
     writeln(' -s  port Set port Low');
     writeln(' -S  port Set port High');
     writeln(' -c  port Clear port, un-export it');

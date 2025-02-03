@@ -7,7 +7,7 @@
    viewBox="0 0 210 297"
    version="1.1"
    id="svg8"
-   inkscape:version="1.3.2 (091e20e, 2023-11-25)"
+   inkscape:version="1.4 (e7c3feb, 2024-10-09)"
    sodipodi:docname="hotwaterctrl_v4.svg"
    inkscape:export-filename="hotwaterctrl_v4.pdf"
    inkscape:export-xdpi="136.84"
@@ -22,6 +22,38 @@
    xmlns:dc="http://purl.org/dc/elements/1.1/">
   <defs
      id="defs2">
+    <inkscape:path-effect
+       effect="powerstroke"
+       message=""
+       id="path-effect51"
+       is_visible="true"
+       lpeversion="1.3"
+       scale_width="1"
+       interpolator_type="CubicBezierJohan"
+       interpolator_beta="0.2"
+       start_linecap_type="zerowidth"
+       end_linecap_type="zerowidth"
+       offset_points="0,4.9921382"
+       linejoin_type="extrp_arc"
+       miter_limit="4"
+       not_jump="false"
+       sort_points="true" />
+    <inkscape:path-effect
+       effect="powerstroke"
+       message=""
+       id="path-effect50"
+       is_visible="true"
+       lpeversion="1.3"
+       scale_width="1"
+       interpolator_type="CubicBezierJohan"
+       interpolator_beta="0.2"
+       start_linecap_type="zerowidth"
+       end_linecap_type="zerowidth"
+       offset_points="0,4.9921382"
+       linejoin_type="extrp_arc"
+       miter_limit="4"
+       not_jump="false"
+       sort_points="true" />
     <rect
        x="444.85928"
        y="879.79155"
@@ -115,7 +147,11 @@
        refX="0"
        refY="0"
        orient="auto"
-       inkscape:stockid="Arrow1Mend">
+       inkscape:stockid="Arrow1Mend"
+       viewBox="0 0 8.88692697 5.07824398"
+       markerWidth="8.88692697"
+       markerHeight="5.07824398"
+       preserveAspectRatio="xMidYMid">
       <path
          transform="matrix(-0.4,0,0,-0.4,-4,0)"
          style="fill-rule:evenodd;stroke:#000000;stroke-width:1pt;marker-start:none"
@@ -1520,18 +1556,18 @@
      borderopacity="1.0"
      inkscape:pageopacity="0.0"
      inkscape:pageshadow="2"
-     inkscape:zoom="3.0751777"
-     inkscape:cx="178.68886"
-     inkscape:cy="69.914659"
+     inkscape:zoom="6.5908627"
+     inkscape:cx="486.12756"
+     inkscape:cy="638.15621"
      inkscape:document-units="mm"
      inkscape:current-layer="layer2"
      showgrid="false"
      showguides="true"
      inkscape:guide-bbox="true"
-     inkscape:window-width="1526"
+     inkscape:window-width="1536"
      inkscape:window-height="998"
-     inkscape:window-x="0"
-     inkscape:window-y="25"
+     inkscape:window-x="116"
+     inkscape:window-y="50"
      inkscape:window-maximized="0"
      objecttolerance="6"
      inkscape:showpageshadow="2"
@@ -2529,7 +2565,7 @@
          id="tspan46"
          style="stroke-width:0.264583"
          x="29.271736"
-         y="50.701157"></tspan><tspan
+         y="50.701157" /><tspan
          sodipodi:role="line"
          style="stroke-width:0.264583"
          x="29.271736"
@@ -2540,6 +2576,27 @@
          id="tspan47"
          x="29.271736"
          y="58.638657" /></text>
+    <text
+       xml:space="preserve"
+       style="font-size:3.175px;line-height:1.25;font-family:FreeSans;-inkscape-font-specification:'FreeSans, Normal';text-align:end;letter-spacing:0px;word-spacing:0px;text-anchor:end;stroke-width:0.264583"
+       x="135.79115"
+       y="183.9751"
+       id="text13"><tspan
+         sodipodi:role="line"
+         style="stroke-width:0.264583"
+         x="135.79115"
+         y="183.9751"
+         id="tspan41">12 way female</tspan><tspan
+         sodipodi:role="line"
+         style="stroke-width:0.264583"
+         x="135.79115"
+         y="187.94385"
+         id="tspan40">connector</tspan></text>
+    <path
+       style="fill:none;stroke:#000000;stroke-width:0.264583px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1;marker-end:url(#Arrow1Mend)"
+       d="M 136.12817,181.12955 V 160.09412"
+       id="path51"
+       sodipodi:nodetypes="cc" />
   </g>
   <g
      inkscape:groupmode="layer"
