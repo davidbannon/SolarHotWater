@@ -75,6 +75,34 @@
           </Linking>
         </CompilerOptions>
       </Item>
+      <Item Name="armhf">
+        <CompilerOptions>
+          <Version Value="11"/>
+          <Target>
+            <Filename Value="raspicapture.armhf"/>
+          </Target>
+          <SearchPaths>
+            <IncludeFiles Value="$(ProjOutDir)"/>
+            <OtherUnitFiles Value="."/>
+            <UnitOutputDirectory Value="lib/$(TargetCPU)-$(TargetOS)"/>
+          </SearchPaths>
+          <CodeGeneration>
+            <TargetProcessor Value="ARMV7"/>
+            <TargetCPU Value="arm"/>
+            <Optimizations>
+              <OptimizationLevel Value="3"/>
+            </Optimizations>
+          </CodeGeneration>
+          <Linking>
+            <Debugging>
+              <GenerateDebugInfo Value="False"/>
+              <RunWithoutDebug Value="True"/>
+              <DebugInfoType Value="dsDwarf3"/>
+              <UseLineInfoUnit Value="False"/>
+            </Debugging>
+          </Linking>
+        </CompilerOptions>
+      </Item>
     </BuildModes>
     <PublishOptions>
       <Version Value="2"/>
@@ -104,11 +132,6 @@
         <UnitName Value="Plotter"/>
       </Unit>
       <Unit>
-        <Filename Value="unit1.pas"/>
-        <IsPartOfProject Value="True"/>
-        <UnitName Value="Unit1"/>
-      </Unit>
-      <Unit>
         <Filename Value="isock.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit>
@@ -135,17 +158,4 @@
       </Debugging>
     </Linking>
   </CompilerOptions>
-  <Debugging>
-    <Exceptions>
-      <Item>
-        <Name Value="EAbort"/>
-      </Item>
-      <Item>
-        <Name Value="ECodetoolError"/>
-      </Item>
-      <Item>
-        <Name Value="EFOpenError"/>
-      </Item>
-    </Exceptions>
-  </Debugging>
 </CONFIG>

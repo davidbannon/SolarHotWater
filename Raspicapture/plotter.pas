@@ -15,6 +15,7 @@ Depends on pi_data_utils that defines my known sensor IDs and the places they ar
 
 History :
     2024-12-08  Change way Pump is plotted, now using data from PumpCtrl, percent based.
+    2025-02-01  Fixed bug with missing Ctrl Data, added label for Collector Data, don't crash with missing data file
 
 }
 
@@ -60,8 +61,8 @@ type
 
 
     private
+      OriginX {, OriginY} : integer;     // There is some memory curruption issue, moving OriginY to Const 'hids' it ???
       canvas : TFPCustomCanvas;
-      OriginX, OriginY : integer;
       AFont: TFreeTypeFont;
       NumbDataRows : integer;
       image : TFPCustomImage;
@@ -73,6 +74,7 @@ type
       PlotLabelNumb : integer;
       MaxPlots : integer;              // Index of last columns of analogue data we have to plot, 0..MaxPlots
       OldPumpPlot : boolean;           // Use DataArray[x].Pump to plot pump activity. PumpCtrl data not available
+      ImageAvailable : boolean;        // Indicates we have a usable image, better save it.
       procedure AdjustLableSpacing();
       procedure DrawPumpPlot();
       procedure fFullFileName(FFname : string);
@@ -118,6 +120,13 @@ the las being a one or two digit percentage that pump was determined to be on
 by the PumpCTRL (not from the current transformer).
 
 for now, we will start showing a sixth plot line, Collector Temp, item [8] remembering it may not be there.
+
+Initial 5 data points in log -
+    T1   Hot water out.
+    T2   Roof
+    T3   Tank Low
+    T4   Ambient
+    T5   Pipe from collector to tank
 }
 
 implementation
@@ -130,7 +139,7 @@ const
   IWidth = 640;    // Image Width, 0 at left
   IHeight = 480;   // Image Height, 0 at top
   DataPump = 9;    // Index, in DataArray.Data[] where PercentagePump is put
-
+  OriginY = 480-48;
 { TPlot }
 
 constructor TPlot.Create();
@@ -144,16 +153,19 @@ end;
 procedure TPlot.DrawAxis();
 var
     i : integer;
+    YValue : integer;
 begin
     //https://wiki.freepascal.org/fcl-image
+    if DoDebug then writeln('TPlot.DrawAxis - starting');
     ftfont.InitEngine;
     FontMgr.SearchPath:='/usr/share/fonts/truetype/dejavu/';
     AFont:=TFreeTypeFont.Create;
     image := TFPMemoryImage.Create (IWidth, IHeight);   // 20 pixels per hour horiz
     OriginX := Image.Width div 20;
-    OriginY := Image.Height - (Image.Height div 10);
+//    OriginY := Image.Height - (Image.Height div 10);
     Canvas := TFPImageCanvas.Create (image);
     Writer := TFPWriterPNG.Create;
+    if DoDebug then writeln('TPlot.DrawAxis - setting up Canvas.');
     with canvas do begin
         Brush.FPColor:=colWhite;
         Brush.Style:=bsSolid;
@@ -167,6 +179,7 @@ begin
         Font.Name := 'DejaVuSans';
         // Expects to find  /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf
         Font.Size := 16;
+        if DoDebug then writeln('TPlot.DrawAxis - doing X.');
         for i := 1 to 24 do begin
             Pen.width := 1;
             Line(OriginX + (i*20), OriginY, OriginX + (i*20), OriginY + 5);
@@ -179,18 +192,32 @@ begin
         Pen.width := 1;
         pen.FPColor := colLtGray;
         pen.style   := psDash;
+        if DoDebug then writeln('TPlot.DrawAxis - doing Y.');
         for i := 0 to 14 do begin       // each tick is 5 degrees, 5 pixes each degree
-            Line(OriginX, OriginY-(i*25) , OriginX+480, OriginY - (i*25));
+            YValue := OriginY;
+            YValue := YValue - (i*25);
+
+{            if DoDebug then writeln('TPlot.DrawAxis - Tick ', i, ' OriginY=', OriginY);
+            if DoDebug then writeln('TPlot.DrawAxis - Y calc =', OriginY - 1);
+            if DoDebug then writeln('TPlot.DrawAxis - Y calc =', OriginY - 0);
+            if DoDebug then writeln('TPlot.DrawAxis - Y calc =', OriginY-(0*25));
+            if DoDebug then writeln('TPlot.DrawAxis - Y calc =', OriginY-(i*25));
+            if DoDebug then writeln('TPlot.DrawAxis - Tick ', i, ' X=', OriginX, ' Y=', OriginY-(i*25), ' x=', OriginX+480, ' y=', OriginY - (i*25));
+}            Line(OriginX, YValue , OriginX+480, YValue);
+//            Line(OriginX, OriginY-(i*25) , OriginX+480, OriginY - (i*25));
             if i mod 2 = 0 then
                  TextOut(5, OriginY - (i*25)+10, inttostr(i*5));
         end;
+        if DoDebug then writeln('TPlot.DrawAxis - Text Out.');
         TextOut(100,25, ExtractFileName(fFFileName));
     end;
+    if DoDebug then writeln('TPlot.DrawAxis - finshed.');
 end;
 
 destructor TPlot.Destroy;
 begin
-    image.SaveToFile (fFFileName.TrimRight('cvs') + 'png', writer);
+    if ImageAvailable then
+         image.SaveToFile (fFFileName.TrimRight('cvs') + 'png', writer);
     Canvas.Free;
     image.Free;
     writer.Free;
@@ -228,7 +255,7 @@ var
     i : integer;
     BadSpacing : boolean = false;
 begin
-    for i := 0 to 4 do
+    for i := 0 to PlotLabelNumb -1 do
         PlotLabels[i].YText := PlotLabels[i].YPlot;
     repeat
           i := 0;
@@ -257,30 +284,16 @@ function TPlot.LoadFile(FFileName: string): integer;
 var
     F : TextFile; s: string;
     StL : TstringList;
-    i : integer;
-begin
-    MaxPlots := 5;                 // default, an index, 0..5, 5 sensors + collector.
-    if DoDebug then writeln('TPlot.LoadFile - opening ', FFileName);
-    setlength(DataArray, 500);     // Thats a full day at 3 minute datapoints,
-    AssignFile(F, FFileName);
-    reset(F);
-    StL := TstringList.Create;
-    StL.Delimiter := ',';
-    Result := 0;
-    readln(F, s);
-    Stl.DelimitedText := S;        // have a look at first line, check format
-    if Stl.Count <> 11 then begin
-       writeln('ERROR, file format invalid, support, now only 11 fields, ', FFileName);
-       // close and exit ?
-    end;
 
-    while not eof(F) do begin                              // ToDo : restructure loop, this looses last data line
+    procedure ProcessDataLine();   // At this point, we have data in STL, get it into DataArray
+    var i : integer;
+    begin
         if STL.Count = 11 then begin
             // readln(F, s);
             // writeln('TPlot.LoadFile S=' + S + ']');
             DataArray[Result].Time := Stl[0];
             for i := 1 to 5 do
-                DataArray[Result].Data[i-1] := strtointdef(Stl[i], 0);
+                DataArray[Result].Data[i-1] := strtointdef(Stl[i], InvalidTemp);
             // STL index 6, in older data sets, has '0' or '1', 0 meaning pump on.
             // this data column will be ignored if we have usable PumpCtrl data.
             DataArray[Result].Pump := Stl[6][1];
@@ -290,19 +303,42 @@ begin
             // We don't plot (PumpCtrl)TankTemp, index 9.
             // PumpCtrl PercentPump might be at StL index 10, otherwise its text.
             // We put it into DataArray index 9 (DataPump) to leave room for additional conventional plots.
-            if STL[10][1] in ['0'..'9'] then
-                DataArray[Result].Data[DataPump] := strtointDef(STL[10], 0);               // if text, set to 0, ignored in plot
+            if (StL[10] <> '')                                // might be empty if Ctrl is not talking to us.
+                and (STL[10][1] in ['0'..'9']) then
+                DataArray[Result].Data[DataPump] := strtointDef(STL[10], InvalidTemp);    // if text, set to InvalidTemp, ignored in plot
             inc(Result);
-        end;
-        if Result >= 500 then break;         // Thats an error, data set is bigger than expected.
+        end;             // end of if STL.Count = 11, what if its not ??
+
+    end;
+
+begin
+    MaxPlots := 5;                 // default, an index, 0..5, 5 sensors + collector.
+    if DoDebug then writeln('TPlot.LoadFile - opening ', FFileName);
+    setlength(DataArray, 500);     // Thats a full day at 3 minute datapoints,
+    AssignFile(F, FFileName);
+    reset(F);
+    StL := TstringList.Create;
+    StL.Delimiter := ',';
+    Result := 0;
+    readln(F, S);
+    Stl.DelimitedText := S;        // have a look at first line, check format
+    if Stl.Count <> 11 then begin
+       writeln('ERROR, file format invalid, support, now only 11 fields, ', FFileName);
+       // close and exit ?
+    end;
+    ProcessDataLine();
+    while not eof(F) do begin                              // chomp through the rest of the file
         readln(F, s);
         Stl.DelimitedText := S;
+        ProcessDataLine();
+        if Result >= 500-1 then break;         // Thats an error, data set is bigger than expected.
+        // if eof(F) then writeln('AT END OF FILE ', S);
     end;
     CloseFile(F);
     STl.Free;
     if (DataArray[Result-1].Data[5] = 0) and (DataArray[0].Data[5] = 0) then
         MaxPlots := 4;
-    if (DataArray[Result-1].Data[DataPump] = 0) and (DataArray[0].Data[DataPump] = 0) then
+    if (DataArray[Result-1].Data[DataPump] = InvalidTemp) and (DataArray[0].Data[DataPump] = InvalidTemp) then
         OldPumpPlot := True;
 end;
 
@@ -383,6 +419,7 @@ var
     Scale : integer;
 begin
     for i := 0 to NumbDataRows-1 do begin
+        if InvalidTemp = DataArray[i].Data[DataPump] then continue;
         if DataArray[i].Data[DataPump] > 0 then begin
             Scale := (DataArray[i].Data[DataPump] div 20) + 1;            // to get 0..5 pixels ?
             Canvas.Line(OriginX+i, PumpY, OriginX+i, PumpY+Scale);
@@ -403,6 +440,15 @@ begin
     else Canvas.Pen.width := 1;
     Canvas.Pen.FPColor := PlotColours[Column];
     for i := 0 to NumbDataRows-1 do begin
+        //if (i > 370) and                                    // MaxPlots is Collector Line
+        //   (Column = MaxPlots) then writeln('-Datarow ', i, ' Data=', DataArray[i].Data[Column]);
+        // Not sure why, missing data (from collector) is set to zero rather than InvalidData
+        if 0 = DataArray[i].Data[Column] then begin                   // Exactly Zero, in a 70000..-10000 range
+            X := OriginX+i;                                           // must still move to right
+            if (i+1) < NumbDataRows then                              // can we read the next one ?
+                Y := Originy - DataArray[i+1].Data[Column] div 200;   // and, if possible, get a good starting point
+            continue;                                                 // but, in the end, do not plot a zero data
+        end;
         if (X <> 0) or (Y <> 0) then
              Canvas.Line(X, Y, OriginX+i, Originy - DataArray[i].Data[Column] div 200);
         X := OriginX+i;
@@ -419,13 +465,15 @@ begin
              Canvas.DrawPixel(OriginX+i, HeaterY, colBlack);   }
     end;
     //if DoDebug then writeln('TPlot.DrawPlot : NDR=', NumbDataRows, ' C=', Column);
-    if Column < MaxPlots then begin                                              // todo : remove this temp hack, no label on Collector Temp !
+//    if Column < MaxPlots then begin                                              // todo : remove this temp hack, no label on Collector Temp !
         // Build an array of data column labels.
+
+    if DataArray[NumbDataRows-1].Data[Column] = 0 then exit;
         i := InsertLabel(OriginY-(DataArray[NumbDataRows-1].Data[Column] div 200));
         PlotLabels[i].Name := TempNames[Column];
         PlotLabels[i].YPlot := OriginY-(DataArray[NumbDataRows-1].Data[Column] div 200);
         PlotLabels[i].Colour := PlotColours[Column];
-    end;
+//    end;
 end;
 
 procedure TPlot.fFullFileName(FFname: string);
@@ -435,19 +483,28 @@ begin
      // DoDebug := True;
      if DoDebug then writeln('TPlot.fFullFileName - plotting ', FFname);
      fFFileName := FFName;
-     DrawAxis();
+     DrawAxis();                                                    // ToDo : if font is not available, this will crash !
+     ImageAvailable := True;                                        // always create a Canvas so a blank image even if no data file
+     if not FileExists(FFName) then begin
+         writeln('ERROR, Cannot fine data file ', FFName);
+         ImageAvailable := True;
+         exit;
+     end;
+     if DoDebug then writeln('TPlot.fFullFileName - loading file [', FFname, ']');
      NumbDataRows := LoadFile(FFName);
+     if DoDebug then writeln('TPlot.fFullFileName - doing plots.');
      for i := 0 to MaxPlots do                  // draw the line
         DrawPlot(i);
      AdjustLableSpacing();                      // now, the labels
-     for i := 0 to 4 do begin                   // only 5 labels at this stage.
+     if DoDebug then writeln('TPlot.fFullFileName - doing labels.');
+     for i := 0 to PlotLabelNumb-1 do begin
          Canvas.Font.FPColor := PlotLabels[i].Colour;
          canvas.TextOut(OriginX + (PPH*25)+5, PlotLabels[i].YText, PlotLabels[i].Name);
          Canvas.pen.FPColor := PlotLabels[i].Colour;
          Canvas.Pen.Width := 1;
          Canvas.Line(OriginX + NumbDataRows, PlotLabels[i].YPlot, OriginX + (PPH*25), PlotLabels[i].YText);
      end;
-     // if DoDebug then writeln('TPlot.fFullFileName - pump plotting ');
+     if DoDebug then writeln('TPlot.fFullFileName - pump plotting ');
      // Pump Power Line
      if not OldPumpPlot then DrawPumpPlot();   // Old pump plot model happens in DrawPlot();
      if DoDebug then writeln('TPlot.fFullFileName - pump plotted ');
