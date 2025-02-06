@@ -54,8 +54,9 @@
     </SearchPaths>
     <Linking>
       <Debugging>
-        <UseHeaptrc Value="True"/>
-        <TrashVariables Value="True"/>
+        <GenerateDebugInfo Value="False"/>
+        <RunWithoutDebug Value="True"/>
+        <DebugInfoType Value="dsDwarf3"/>
       </Debugging>
     </Linking>
   </CompilerOptions>
