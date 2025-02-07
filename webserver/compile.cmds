@@ -1,0 +1,14 @@
+On my U2004 VM, with an armhf cross compiler installed -
+
+/home/dbannon/bin/FPC/fpc-3.2.3/bin/fpc  -Parm -CpARMV7 -MObjFPC -Scghi -O3 -gt -l -vewnhibq -Fu. -owebserver-armhf webserver.pas
+
+On my LT, no cross compiling
+
+/home/dbannon/bin/FPC/fpc-3.2.4/bin/fpc  -MObjFPC -Scghi -O3 -gt -l -vewnhibq -Fu. -owebserver webserver.pas
+
+-S... compile options (c ops, goto, ansistrings, inlining
+-v... usual verbose options
+-XX   smart linking
+-Xs   strip
+-gt   trash vars 
+
