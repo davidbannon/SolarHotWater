@@ -112,11 +112,6 @@
     <RunParams>
       <FormatVersion Value="2"/>
     </RunParams>
-    <RequiredPackages>
-      <Item>
-        <PackageName Value="cairocanvas_pkg"/>
-      </Item>
-    </RequiredPackages>
     <Units>
       <Unit>
         <Filename Value="raspicapture.lpr"/>
@@ -139,6 +134,14 @@
         <Filename Value="raspi_utils.pas"/>
         <IsPartOfProject Value="True"/>
         <UnitName Value="Raspi_Utils"/>
+      </Unit>
+      <Unit>
+        <Filename Value="data_utils.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="webserv.pas"/>
+        <IsPartOfProject Value="True"/>
       </Unit>
     </Units>
   </ProjectOptions>

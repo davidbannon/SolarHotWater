@@ -10,13 +10,18 @@ unit isock;
 { This unit will provide a thread that will monitor the isocket and respond when
   a message is received. The thread will create a INetServerApp, it sets up all
   the socket infrasture. When a message arrives, OnConnect is called, it reads
-  the message, parses it. Then attemp to get a
+  the message, parses it. Then attemps to get a
   lock on the CtrlDataArray (using  LockedBySocket) if LockedByCapture permits.
   if lock is successful, will update array. If
   lock is unsuccessful, no problem, drop data on floor.
   CtrlDataArray, LockedBySocket and LockedByCapture are in pi_data_Utils.
   The message is three comma seperated integers.
   ,CollectorTemp,TankTemp,%Pump     (temps are in milli degrees, % in percentage points)
+
+  To use this unit, declare a (global) var in main unit :
+  SocketThread : TSocketThread;
+
+  It then runs listening for an incoming TCP Socket call.
 
 
   History :
@@ -25,7 +30,7 @@ unit isock;
 
 interface
 
-uses ssockets, Classes, sysutils {, BaseUnix};
+uses ssockets, Classes, sysutils, data_utils {, BaseUnix};
 
 
 const
@@ -33,17 +38,12 @@ const
 
 //type    TCaptureMesgProc = procedure(const St : string) of object;
 
-type TCtrlData = record
-    Collector : longint;
-    Tank : longint;
-    PercentPump : integer;
-    Valid : boolean;
-    end;
+
 
 Type             { TINetServerApp }
     TINetServerApp = Class(TObject)
     Private
-        SocketCriticalSection: TRTLCriticalSection;   // we use RTL CriticalSection code
+        // SocketCriticalSection: TRTLCriticalSection;   // we use RTL CriticalSection code
 
     Public
         FServer : TInetServer;
@@ -70,7 +70,6 @@ Type              { TSocketThread }
     end;
 
 var
-    CtrlDataArray : array [0..2] of TCtrlData;   // shared with raspicapture, protected by LockedByCapture, LockedBySocket
     DebugSock : boolean = false;
 
 implementation
@@ -159,13 +158,13 @@ var
     i : integer = 1;
 //    SubSt : string = '';
 //    Stage : integer = 1;
-    LongArray : array [0..2] of longint;
+    LongArray : array [0..3] of longint;
     StArray : TStringArray;
 
     procedure UpdateCtrlArray();
     begin
-        EnterCriticalSection(SocketCriticalSection);
-        try
+//        EnterCriticalSection(SocketCriticalSection);
+//        try
 //            if LockedByCapture then begin           // will, occasionally happen, its OK if occasionally
 //                writeln('ERROR UpdateCtrlArray - Unable to lock CtrlDataArray, OK');
 //                exit;
@@ -173,38 +172,46 @@ var
             if LongArray[2] > 100 then LongArray[2] := 100;                     // bug in ctrl sometimes gives 101%
             if DoDebug then writelog('NOTICE : TINetServerApp.ProcessMessage UpdateCtrlArray - looking for a slot '
                     + LongArray[0].ToString + ' ' + LongArray[1].ToString + ' ' + LongArray[1].ToString);
-            while LockedByCapture do sleep(20);
-            LockedBySocket := True;
-            i := 0;
-            while i < 3 do begin
-                if not CtrlDataArray[i].Valid then begin
-                     //CtrlDataArray[i].Pump := PumpSt;
-                     //CtrlDataArray[i].PumpWas := WasSt;
-                     CtrlDataArray[i].Collector   := LongArray[0];
-                     CtrlDataArray[i].Tank        := LongArray[1];
-                     CtrlDataArray[i].PercentPump := LongArray[2];
-                     CtrlDataArray[i].Valid := True;
-                     if DebugSock then writelog('NOTICE : TINetServerApp.ProcessMessage - found a slot');
-                     // writeln('iSock -  UpdateCtrlArray. PercentPump is ', LongArray[2]);
-                     break;
+//            while LockedByCapture do sleep(20);
+//            LockedBySocket := True;
+
+            if GrabLock(ThreadLock, 50) then begin       // if we fail to get a lock, so be it !
+                i := 0;
+                while i < 3 do begin
+                    if not CtrlDataArray[i].Valid then begin
+                         //CtrlDataArray[i].Pump := PumpSt;
+                         //CtrlDataArray[i].PumpWas := WasSt;
+                         CtrlDataArray[i].Collector   := LongArray[0];
+                         CtrlDataArray[i].Tank        := LongArray[1];
+                         CtrlDataArray[i].PercentPump := LongArray[2];
+                         CtrlDataArray[i].PumpJams := LongArray[3];
+                         CtrlDataArray[i].Valid := True;
+                         if DebugSock then writelog('NOTICE : TINetServerApp.ProcessMessage - found a slot');
+                         // writeln('iSock -  UpdateCtrlArray. PercentPump is ', LongArray[2]);
+                         break;
+                    end;
+                    inc(i);
                 end;
-                inc(i);
+                InterLockedExchange(ThreadLock, 0);   // release it
             end;
             // if we did not find a free slot, just drop it on floor.
-        finally
+{        finally
             LockedBySocket := False;
             LeaveCriticalSection(SocketCriticalSection);
-        end;
+        end;  }
     end;
 
 begin
     StArray := Mesg.Split(',');
-    if length(StArray) > 2 then begin          // Not much of a sanity check but ...
+    if (length(StArray) = 3) or (length(StArray) = 4) then begin     // Not much of a sanity check but ...
         if TryStrToInt(StArray[0], LongArray[0])
             and TryStrToInt(StArray[1], LongArray[1])
             and TryStrToInt(StArray[2], LongArray[2])
-            then begin                // OK, we have the three numbers.
-                    UpdateCtrlArray();        // don't need those parameters
+            then begin                             // OK, we have the three numbers.
+                LongArray[3] := -1;                // New, late 2025, count of pump jam errors dealt with since ctrl boot
+                if (length(StArray) = 4) then      // ie we have PumpJam data
+                    TryStrToInt(StArray[3], LongArray[3]);
+                UpdateCtrlArray();                 // don't need those parameters
                 exit;
             end;
     end;

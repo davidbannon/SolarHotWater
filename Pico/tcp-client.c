@@ -10,7 +10,31 @@
      2024-12-07 Commented out 2 lines from ControlLoop() that prevented updates
                 to PumpWasOn when pump remains on between cycles. Affected only
                 reporting. Now report a % of pump on time.
-*/
+     2025-11-25 Added code to help recover from a jamed pump.
+                
+     === Pump Jam Issue ===
+     Nov 24th, 2025, hot but not stinking hot.
+     Temp started to rise 15:16 from a base around 66c to 106c 30 minutes later.
+     Reached a peak of 128c
+     At 18:46 (I think) I bounced the pump manually and collector temp came down to
+     normal within one 3 minute cycle. But sun was almost down.
+     Nov 25th, 2025, hot but not stinking hot.  
+     At 13:19 started 71c,76c,85c,90c,95c,100c,105c,109c (13:40)
+     At 13:40+ bounced, 13:43 82c, 66 (normal).
+     Lets assume it will take 15minutes or so to detect a jamed pump, 95c
+     This assumes collector never get to 95c naturally ?? TankMaxTemp will stop
+     pump before then. So if pump is powered off, the PumpJam code is disabled.
+     
+     === Measurement Repeatability, noise ===
+     Currently taking 10 readings and averaging them, eg 61.06 to 61.52 using the
+     RasPi Pico's internal A/D. Pretty reasonable ?
+     
+     === Cycle ===
+     Seems we have a 1 second measure cycle, take 10 samples of each sensor and
+     do the calcs, print to UART, aprox 500mS, we sleep 500ms for a 1 sec cycle.
+     Every 60 seconds, we send an update out via tcp socket  
+     
+ */
 
 #include <stdio.h>
 #include "pico/stdlib.h"
@@ -25,7 +49,7 @@
 // To compile, mkdir build; cd build;
 // export PICO_SDK_PATH=/home/dbannon/Pico2/SDK   // that being where SDK lives, contains dir like pico-examples and external.
 // cmake -DPICO_BOARD=pico_w ..  // don't miss the '..' !
-// make    // slow !
+// make    
 
 //  To read the attached debug pico, "tio /dev/ttyACM0", ctrl-T to get menu, ctrl-t, q to quit.
 //  Make sure you are in the dialout group to use serial port (ie USB).
@@ -69,6 +93,8 @@ enum TPumpState {psOff, psCollectHot, psCollectFreeze};
   enum TPumpState PumpState = psOff;
   int TCP_Count = 0;                     // Only sent a TCP report when this reaches X    
   int PumpWasOn = 0;
+  int LogPumpJam = 0; 
+  int JamCatchUp = 0;
   
 // -------------------------   T C P   C O D E ---------------------------------
 // TCP process is
@@ -309,11 +335,11 @@ void Report(float Collect, float Tank) {   // receives temps in degrees
     
     switch (PumpState) {
         case psOff :
-            printf("Pump is OFF, Collector %.2f and Tank %.2f, Count=%d\n", Collect, Tank, TCP_Count);
+            printf("Pump is OFF, Collector %.2f and Tank %.2f, Count=%d, LogPumpJam %d\n", Collect, Tank, TCP_Count, LogPumpJam);
             //sprintf(PumpSt, "%s", "OFF");
             break;
         case psCollectHot :
-            printf("Pump is ON (hot), Collector %.2f and Tank %.2f, Count=%d\n", Collect, Tank, TCP_Count);
+            printf("Pump is ON (hot), Collector %.2f and Tank %.2f, Count=%d, LogPumpJam %d\n", Collect, Tank, TCP_Count, LogPumpJam);
             //sprintf(PumpSt, "%s", "COLLECTHOT");
             break;
         case psCollectFreeze :
@@ -326,7 +352,7 @@ void Report(float Collect, float Tank) {   // receives temps in degrees
     }
     //printf("Report : count is %d\n", TCP_Count);
     if (TCP_Count > 60) {
-        sprintf(MsgBuff, "%d,%d,%d", (int)(Collect*1000.0), (int)(Tank*1000.0), (int)((PumpWasOn*100)/TCP_Count));
+        sprintf(MsgBuff, "%d,%d,%d,%d", (int)(Collect*1000.0), (int)(Tank*1000.0), (int)((PumpWasOn*100)/TCP_Count), LogPumpJam);
         PumpWasOn = 0;     
         // Pass temperature as ints, being milli degrees C, to be consistent with how capture works.
         run_tcp_client();
@@ -361,7 +387,7 @@ void ControlLoop() {
                     PumpState = psCollectHot;
             break;
         case (psCollectHot) :       // Already collecting, so we may turn it off.
-            if (CollectorTemp < (TankTemp + PumpOffDelta)) 
+            if ((CollectorTemp < (TankTemp + PumpOffDelta)) || (TankTemp > MaxTankTemp)) 
                 PumpState = psOff;
             break;
         case (psCollectFreeze) :    // pumping 'cos of freeze ? We may turn it off.
@@ -371,15 +397,22 @@ void ControlLoop() {
         default :                   // not possible ?  Anyway, we'll set it off.
             PumpState = psOff;
     }       // end of switch statement.
- // WRONG - if Pump is remaining ON, the next line prevents PumpWasOn from being set.                          
- //   if (OldPumpState != PumpState) {            // 'something' seems to trigger a pump 'flash' ?
-        if ((PumpState == psCollectHot) || (PumpState == psCollectFreeze)) {
+    
+    if ((PumpState == psCollectHot) || (PumpState == psCollectFreeze)) {
             gpio_put(PumpPort, true);           // Make it so.
             PumpWasOn = PumpWasOn + 1;                   // Report() will reset that.
-        } else {                                
+    } else {                                
             gpio_put(PumpPort, false);
-        }
- //   }
+    }
+    // This happens if pump 'running continusly' but collector is still over 95c and tank is less than Max 
+	if ((JamCatchUp++ > 100) && (CollectorTemp > 95.0) && (OldPumpState == psCollectHot) && (PumpState == psCollectHot) ) {
+    	// This means (?) pump is powered  but not spinning. Bounce for 2 seconds
+    	gpio_put(PumpPort, false);
+    	sleep_ms(2000);
+    	gpio_put(PumpPort, true);
+    	LogPumpJam++;
+    	JamCatchUp = 0;   // don't do this again until pump has had time to catch up, 100 cycles ?
+    }
     sleep_ms(500); 
     Report(CollectorTemp, TankTemp);
     // sleep_ms(250);

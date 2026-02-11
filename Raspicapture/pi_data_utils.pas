@@ -76,8 +76,9 @@ var
     TempSensors : array of string = ('28-001414a820ff', '28-0014154270ff', '28-0014153fc6ff', '28-000004749871', '28-001414af48ff');
     TempNames :   array of string = ('Hot Out', 'Roof', 'Tank Low', 'Ambient', 'Solar', 'Collector', 'Tank');
     DoDebug : boolean = false;                // Might be set in raspicapture.lpr
-    LockedBySocket : boolean = false;         // rough and ready locking, socket has access
-    LockedByCapture : boolean = false;        // rough and ready locking, capture code has access
+
+//    LockedBySocket : boolean = false;         // rough and ready locking, socket has access
+//    LockedByCapture : boolean = false;        // rough and ready locking, capture code has access
 
 implementation
 

@@ -23,6 +23,7 @@ backup/
 lib/
 
 # Added by DRB
+*.pdf
 published/
 # *.lrj    apparently needed by the translation system
 Pico/build
@@ -37,10 +38,12 @@ Legacy/isockcapture/isocksvr-old
 Pico/isockcapture-old
 Raspicapture/raspicapture
 Raspicapture/raspicapture-old
+Raspicapture/raspicapture-armhf
+Raspicapture/raspicapture-aarch64
 nohup.out
 ppas.sh
 http/index.html
-credentials.h
+credentials.h*
 Tools/water_ctrl
 Tools/raspi_tool
 PumpCTRL/pumpctrl

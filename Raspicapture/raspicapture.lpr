@@ -10,10 +10,21 @@ program raspicapture;
 
 
 { A small command line (needs fpc only) that reads the Paspberry Pi's temp sensors
-  and can also plot the resulting cvs files to png images.
+  and can also plot the resulting cvs files to png images, read the pump contoller
+  status, either via a isocket (the raspberry pi Pico controller) or, newer,
+  asks a web service running on an esp32 (more tolerant of power problems).
+
+  The pump ctrl makes a string containing four comma separeted integers,
+  collector,tank,percentPumpOn,PumpJams  being
+  1) and 2) temperatures in milli degrees.
+  3) percentage, as a 1 to 3 digit that the pump was on for that cycle
+  4) occasionly, during hot times, the pump fails to spin when turned on. The
+     controller detects this, turns it off for 2 seconds and on again. We count
+     the number of times this has happened (zeroed on power up).
+
   
   Note, we need libfreetype here but installing libfreetype6 package will not
-  help because, annother one of FPC errors, it depends, at run time, on 
+  help because, another one of FPC errors, it depends, at run time, on
   libfreetype6.so - the symlink that should be used only at link time.
   
   So, manually make that symlink or install libfreetype-dev !
@@ -65,22 +76,24 @@ program raspicapture;
 
 }
 
+{ On Feb 5, 2026 I removed the cairocanvas_pkg depenedncy from the project, seems
+  its not needed.
+}
+
 {$mode objfpc}{$H+}
 
 {$WARN 5024 off : Parameter "$1" not used}
 
+{x$define UseISock}     // Get PumpCtrl data via old iSock, Pico Pi based one,
+                        // else get PumpCtrl data via a Web Service running on ESP32 CTRL
+
 uses
     {$IFDEF UNIX}cthreads, {$ENDIF}
     Classes, SysUtils, CustApp, DateUtils, pi_data_utils, Plotter, BaseUnix, Unix,
-    isock, Raspi_Utils;
+    {$ifdef UseISock} isock,
+    {$else} webserv,
+    {$endif} Raspi_Utils, data_utils{, syncobjs};
 
-
-(* type TCtrlData = record
-    Collector : longint;
-    Tank : longint;
-    Pump : string;
-    Valid : boolean;
-    end;            *)
 
 type
 
@@ -100,7 +113,7 @@ type
 
                                             // Calculates effective ctrl data and appends
                                             // it to the passed string. noop in x86
-        procedure AddCtrlData(var DataSt: string);
+        procedure AddCtrlData(var DataSt: string; DummyData : boolean = false);
                                             // divides each total in array by its own number of points
         procedure CalculateSensors;
         procedure CheckData;
@@ -133,12 +146,13 @@ type
                         // Writes, to stdout, the char in Heater and Pump ports.
         procedure ShowIOPorts();
         procedure ShowSensors();
-                        { Ctrl data comes from the actual HW controller via a inet socket.
+                          { Ctrl data comes from the actual HW controller via a inet socket.
                           result can be 0, 1, 2, 3 - 0 says no data, invalid, 1 says its based
                           on only 1 data point etc, ideally we want three ! Zeros the data points
                           as it goes. Caller may like to report a less than 3 result. }
         function AverageCtrlData(out D: TCtrlData): integer;
         procedure WriteHeaderFile();
+                            { Only used during setup, AverageCtrlData() zeros it while reading.}
         procedure ZeroCtrlData();
 //        procedure WriteLog(msg: string);
         procedure WriteWebpage();
@@ -155,8 +169,11 @@ var
       ExitNow : boolean;      // set by interrupt handlers to tell loop to exit.
       //CtrlDataArray : array [0..2] of TCtrlData are both declared in isock.pas
       Application: TRaspiCapture;
+      {$ifdef UseISock}
       SocketThread : TSocketThread;
-
+      {$else}
+      WebServThread : TWebServThread;
+      {$endif}
 
 
 
@@ -175,9 +192,11 @@ begin
     writeln('-y --yesterday   Plot from yesterdays csv to png');
     writeln('-i --ioport      Display the io ports, 0=active or low.');
     writeln('-n --no_socket   Do not listen on tcp socket');
+    writeln('-r --read-serv   Read the Serv data and exit');
     writeln('eg raspicapture -c -d /home/dbannon/http/  to start an indefinite capture run.');
     writeln('If run without -c will just read and exit.');
     writeln('Always assumes 5 preset sensors present, reports absence with -1000000');
+    writeln('CVS Format : Time, HotOut, Roof, TankLow, Amb, CollPipe, ?, Jams, Coll, Tank, Pump%');
     Terminate;
     Exit;
 end;
@@ -248,10 +267,10 @@ procedure Traspicapture.PlotIt(FFName: string);
 var
     Plot : TPlot;
 begin
-    if DoDebug then writeln('Traspicapture.PlotIt');
+    // if DoDebug then writeln('Traspicapture.PlotIt');
     Plot := TPlot.Create;
     if Plot = nil then begin
-      writeln('Traspicapture.PlotIt - cannot create TPlot.');
+      writelog('Traspicapture.PlotIt - cannot create TPlot.');
       exit;
     end else if DoDebug then writeln('Traspicapture.PlotIt TPlot Created');
     if FFName <> '' then
@@ -314,6 +333,31 @@ end;
 {  writes something like this (content after '+' added 24Aug24
 12:56,45750,23729,22478,19270,29249,1,0,35977,25228,COLLECTHOT+WasOn
 12:59,45395,23833,23187,19416,28020,0,0,27192,25960,OFF+OFF
+
+  ------- But now like this ---------
+16:47,49937,39250,59437,33791,39874,1,0,113129,62337,100
+16:50,49979,39187,59437,33749,39395,1,0,114819,62168,100
+16:53,50000,39104,59437,33708,63375,0,0,119275,62179,100
+16:56,50041,39020,59437,31312,62187,0,0,69252,62163,100
+
+the first in 0,0 is pump detected by the current transormers, 0=ON, second 0 is heater, not yet working
+the next two numbers are mDegrees of the collector and Tank as provided by the pump ctrl
+The '100' [0-100] is the pump duty cycle as provided by the pump ctrl
+Note that at 16:50, the pump CT is '1', ie off but pump CTRL thinks its on !  - ERROR
+
+This appears to be a mechanical problem in pump, it gets powered up, its LED is on but
+its not spinning, in that state it draws less power and the CT shows that.
+Unpowering the pump for a few seconds and hen repower did restart it, Nov 2, 2025
+
+Can I do that 'unpowering' in the pump ctrl ?  Detect collector temp is > 100c and
+stop pump for 10 seconds ?  Better if I could check that pump CT is not reporting
+pump=off but only the raspberry pi nows that ?
+
+Will try and repeat that 'fix' manually .....
+
+Note also, an open circuit sensor reports eg 238639 but that depends on how many points
+in the average were open I guess.
+
 }
 { Now expects to find numbers in SensorArray pre-calculated. }
 
@@ -333,12 +377,9 @@ begin
         if (Index < 5)  or SensorArray[Index].Present then                 // Always first five 0-4, remainder just testing
             DataSt := DataSt + ',' + inttostr(SensorArray[Index].Value);
 
-    DataSt := DataSt +PumpAndHeater();                 // Pump and Heater. 0 means on, powered.
-    while LockedBySocket do sleep(5);                  // Wait for Socket to finish, should be very quick and only occasionally
-    LockedByCapture := True;
+    DataSt := DataSt + PumpAndHeater();                      // Pump and Heater. 0 means on, powered. Only Pump for now !! Drop even it soon
     AddCtrlData(DataSt);
-    LockedByCapture := False;
-    if HasOption('D', 'debug') then writelog('Saving data to ' + FFileName + ' [' + DataSt + ']');
+    if DoDebug then writelog('Saving data to ' + FFileName + ' [' + DataSt + ']');
     AssignFile(F, FFileName);
     if FileExists(FFileName) then
         Append(F)
@@ -366,9 +407,7 @@ begin
             + '</h1></BODY></HTML>');
         closeFile(F);
     end;
-    // if HasOption('D', 'debug') then writelog('Finished saving data, will call WriteWebpage()');
     WriteWebpage();
-    // if HasOption('D', 'debug') then writelog('Finished WriteWebpage()');
 end;
 
 { Saved Data looks like this, one row every time interval, at least five data data columns
@@ -492,23 +531,23 @@ begin
     end;
 end;
 
-function Traspicapture.PumpAndHeater() : string;
+function Traspicapture.PumpAndHeater() : string;   // This is redundent, hwctrl gives us a better view of pump
 var
     P, H : char;
 begin
-    if NotRaspi then
-        exit(',0,0');                                // That is, both 'on' !
+    if NotRaspi then                               // Note only Pump and we are not plotting it now anyway.
+        exit(',0');                                // That is, 'on' !
     if (not ReadRaspiPort(PIN_HW_PUMP, P)) then begin
         if HasOption('D', 'debug') then writelog('Traspicapture.PumpAndHeater() failed to read pump port.');
-        writeln('Traspicapture.PumpAndHeater() failed to read pump port.');
+        writelog('Traspicapture.PumpAndHeater() failed to read pump port.');
         P := ' ';
     end;
     if (not ReadRaspiPort(PIN_HW_HEATER, H)) then begin
         if HasOption('D', 'debug') then writelog('Traspicapture.PumpAndHeater() failed to read heater port.');
-        writeln('Traspicapture.PumpAndHeater() failed to read heater port.');
+        writelog('Traspicapture.PumpAndHeater() failed to read heater port.');
         H := ' ';
     end;
-    Result := ',' + P + ',' + H;
+    Result := ',' + P {+ ',' + H};
 end;
 
 
@@ -536,25 +575,33 @@ begin
     D.Tank  := 0;
     D.PercentPump := 0;;
     D.Valid := false;
-    while I < 3 do begin
-        if CtrlDataArray[i].Valid then begin
-            D.Collector += CtrlDataArray[i].Collector;
-            D.Tank += CtrlDataArray[i].Tank;
-            D.PercentPump += CtrlDataArray[i].PercentPump;
-            // writeln('Traspicapture.AverageCtrlData - D=', D.PercentPump, ' and CDA=', CtrlDataArray[i].PercentPump);
-            D.Valid := True;
-            CtrlDataArray[i].Collector := 0;
-            CtrlDataArray[i].Tank := 0;
-            CtrlDataArray[i].PercentPump := 0;
-            CtrlDataArray[i].Valid := False;
-         end else break;
-        inc(i);
-    end;
-    result := i;
-    if i > 1 then begin            // 2 or 3
-        D.Collector := D.Collector div i;
-        D.Tank := D.Tank div i;
-        D.PercentPump := D.PercentPump div i;
+    if GrabLock(ThreadLock, 200, 2) then begin
+        try
+            while I < 3 do begin
+                if CtrlDataArray[i].Valid then begin
+                    D.Collector += CtrlDataArray[i].Collector;
+                    D.Tank += CtrlDataArray[i].Tank;
+                    D.PercentPump += CtrlDataArray[i].PercentPump;
+                    D.PumpJams := CtrlDataArray[i].PumpJams;             // don't average
+                    D.Valid := True;
+                    CtrlDataArray[i].Collector := 0;
+                    CtrlDataArray[i].Tank := 0;
+                    CtrlDataArray[i].PercentPump := 0;
+                    CtrlDataArray[i].Valid := False;
+                 end else break;
+                inc(i);
+            end;
+            result := i;
+            if i > 1 then begin            // 2 or 3
+                D.Collector := D.Collector div i;
+                D.Tank := D.Tank div i;
+                D.PercentPump := D.PercentPump div i;
+            end;
+        finally
+           InterLockedExchange(ThreadLock, 0);   // release it
+        end;
+    end else begin
+        result := 0;                                   // AddCtrlData() will set fields to zero
     end;
     // writeln('Traspicapture.AverageCtrlData - D.PercentPump ', D.PercentPump);
 end;
@@ -562,33 +609,49 @@ end;
 procedure Traspicapture.ZeroCtrlData();
 var i : integer = 0;
 begin
-    for i := 0 to 2 do begin
-        CtrlDataArray[i].Collector := 0;
-        CtrlDataArray[i].Tank := 0;
-        CtrlDataArray[i].Valid := False;
-        CtrlDataArray[i].PercentPump := 0;
-        //CtrlDataArray[i].Pump := 'OFF';
-    end;
+    if GrabLock(ThreadLock, 500, 3) then begin               // Second thread not running here anyway.
+        try
+            for i := low(CtrlDataArray) to high(CtrlDataArray) do begin
+                CtrlDataArray[i].Collector := 0;
+                CtrlDataArray[i].Tank := 0;
+                CtrlDataArray[i].Valid := False;
+                CtrlDataArray[i].PercentPump := 0;
+            end;
+        finally
+            InterLockedExchange(ThreadLock, 0);   // release it
+        end;
+    end
 end;
 
-procedure Traspicapture.AddCtrlData(var DataSt : string);
+procedure Traspicapture.AddCtrlData(var DataSt : string; DummyData : boolean = false);
 var
     Data : TCtrlData;
     Points : integer;
 begin
-    if HasOption('n', 'no_socket') then exit;
-    Points := AverageCtrlData(Data);
+    // expected to add four intgers, PumpJams,CollTemp,TankTemp,%Pump
+    // don't leave blank, Plotter MUST get 11 readable fields
+    // handling errors here untested
+    if HasOption('n', 'no_net') or (DummyData) then begin
+        DataSt := DataSt + ',0,0,0,0';
+        exit;
+    end;
+    Points := AverageCtrlData(Data);      // if AverageCtrlData() fails to get lock it returns 0
     if Points = 0 then begin
-        DataSt := DataSt + ', , , ';
-        writeln('No solar control data available');
+        DataSt := DataSt + ',0,0,0,0';
+        writelog('No solar control data available yet...');
         exit;
     end
     else if Points < 3 then
-            writeln(Points, ' solar control points available');
+            writelog('Only ' + inttostr(Points) + ' solar control points available');
+    // At this point, DataSt looks like this =
+    // 10:34,43166,22250,48125,19812,55124,1       - note, heater code NOT applied in PumpandHeater()
+    // if DoDebug then writeln('Traspicapture.AddCtrlData - start DataSt ' + DataSt);
+    // re-purpose Heater, perhap temporarily, to show Ctrl Pump Jam Errors.
+    DataSt := DataSt + ',' + inttostr(Data.PumpJams);
     DataSt := DataSt + ',' + inttostr(Data.Collector);
     DataSt := DataSt + ',' + inttostr(Data.Tank);
     DataSt := DataSt + ',' + inttostr(Data.PercentPump);
-
+    // if DoDebug then writeln('Traspicapture.AddCtrlData -  end DataSt ' + DataSt);
 end;
 
 
@@ -609,13 +672,22 @@ begin
     writeln('raspicapture : in EnterCapturLoop.');
     writelog('raspicapture : in EnterCaptureLoop.');
     if HasOption('D', 'Debug') then
-         writelog('NOTICE : Traspicapture.EnterCaptureLoop starting socket server');
-    if HasOption('n', 'no_socket') then
+         writelog('NOTICE : Traspicapture.EnterCaptureLoop starting ' +
+         {$ifdef UseISock} 'socket server');
+         {$else}           'webservice mode');
+         {$endif}
+    if HasOption('n', 'no_net') then
          writelog('NOTICE : Not Listening for Ctrl Box temps over TCP')
     else begin
+        {$ifdef UseISock}
         SocketThread := TSocketThread.Create(True);
         SocketThread.Start;
+        {$else}
+        WebServThread := Nil;
+        //WebServThread.Start;
+        {$endif}
     end;
+
     if not NotRaspi then begin                                  // Setup the i/o Ports
         Pump := ControlPort(PIN_HW_PUMP, RaspiPortRead);
         if Pump = RaspiPortWrong then begin                     // The loop has priority, it can force the port
@@ -636,11 +708,20 @@ begin
             end;
     end;
 //    Tick := GetTickCount64;
-
-    repeat
+                                // ----------- OK, this is the loop ------------
+     repeat
         if HasOption('D', 'debug') then writelog('About to check a batch of data');
         // if not NotRaspi then CheckData();         // we grabbed some data in DoRun()
-        if CollectTemps() then begin     // Collects some temp readings and ret T is we have enough to write a line
+
+         {$ifndef UseISock}
+        // Trigger a thread to collect data from hwctrl while we d the time consuming temp sensors
+        if ThreadCount = 0 then begin
+            WebServThread := TWebServThread.create(true);
+            WebServThread.Start;
+        end;
+        {$endif}
+
+        if CollectTemps() then begin     // Collects some temp readings and ret T if we have enough to write a line
             CalculateSensors();          // for the line of data, divide each point by its numb of points
             SaveContentToFile();         // writes one line to output file
             WriteHeaderFile();           // updates the header file
@@ -659,6 +740,7 @@ begin
             end;
             sleep(20);                                      // Puts a limit on our timing accuracy but not a problem
         end;
+
         NextMeasure := Now() + Interval;
 //        Tick := GetTickCount64;
 //        writeln('Next measure due at ' + formatdateTime('hh:mm:ss', NextMeasure));
@@ -669,19 +751,41 @@ end;
 procedure Traspicapture.DoRun;        // must call Terminate if you want this to not be recalled.
 var
     ErrorMsg: String;
+    SomeString : string = '';
     NumbMinutes : integer;
     Interval : TDateTime;
     Pump, Heater : TRaspiPortStatus;
 begin
-    // writeln('Traspicapture.DoRun');
+    //writeln('Traspicapture.DoRun');
     NotRaspi := {$i %FPCTARGETCPU%} = 'x86_64';
-    ErrorMsg:=CheckOptions('hm:cd:tpyDLsin', 'no_socket help minutes capture directory testmode plot debug log_file symlinks ioports');
+    ErrorMsg:=CheckOptions('rhm:cd:tpyDLsin', 'read_serv no_net help minutes capture directory testmode plot debug log_file symlinks ioports');
     if ErrorMsg<>'' then begin
         ShowException(Exception.Create(ErrorMsg));
         Terminate;
         Exit;
     end;
+    if HasOption('h', 'help') then begin
+        WriteHelp;
+        exit;
+    end;
+    {$ifndef UseISock}
+    if not Application.HasOption('n', 'no_net') then begin
+        // CtrlDataCritical := TCriticalSection.Create;
+        ZeroCtrlData();
+    end;
+    if HasOption('r', 'read_serv') then begin            // Only when using web service model
+        if Downloader(ServIP, SomeString, ctText) then
+            writeln(SomeString)
+        else begin
+            WriteLn(NetErrorString);
+            writeln(SomeString);
+        end;
+        terminate;
+        exit;
+    end;
+    {$endif}
     if HasOption('i', 'ioports') then begin
+        writeln('IO ports');
         DisplayIOPortList;
         Terminate;
         Exit;
@@ -700,15 +804,6 @@ begin
         end;
         if Heater = RaspiPortSuccess then ControlPort(PIN_HW_HEATER, RaspiPortReset);       // NOOOOOOO !
         if Pump = RaspiPortSuccess then ControlPort(PIN_HW_Pump, RaspiPortReset);
-
-(*        if ControlPort(PIN_HW_HEATER, RaspiPortRead)
-            and ControlPort(PIN_HW_PUMP,   RaspiPortRead) then begin
-                // sleep(100);                  // Must let ports settle after setting, maybe system dependent
-                ShowIOPorts()                   // but we have timimg delays below so don't need it here.
-            end
-        else writeln('Cannot setup i/o ports');
-        ControlPort(PIN_HW_PUMP,   RaspiPortReset);
-        ControlPort(PIN_HW_HEATER, RaspiPortReset);    *)
         Terminate;
         Exit;
     end;
@@ -716,13 +811,13 @@ begin
     if HasOption('D', 'debug') then begin
         writeln('Traspicapture.DoRun - Starting up in Debug mode.');
         DoDebug := true;
+        DebugWebService := true;    // in the Web Service using module
+        {$ifdef UseISock}
         DebugSock := True;
+        {$endif}
     end;
 
-    if HasOption('h', 'help') then begin
-        WriteHelp;
-        exit;
-    end;
+
 
     if HasOption('m', 'minutes') then begin
         try
@@ -730,9 +825,9 @@ begin
         except on E:  EConvertError do
             WriteHelp;
         end;
-        Interval := EnCodeTime (0,NumbMinutes,0,0);
+        Interval := EnCodeTime (0,NumbMinutes,0,0);     // H, M, S, mS, eg one minute
     end else
-        Interval := EnCodeTime (0,1,0,0);
+        Interval := EnCodeTime (0,1,0,0);               // one minute
 
     if HasOption('p', 'plot') or HasOption('y', 'yesterday')then begin
         PlotIt;
@@ -740,16 +835,19 @@ begin
         exit;
     end;
 
-    if  HasOption('t', 'testmode') then
+    if  HasOption('t', 'testmode') then begin
         Interval := EnCodeTime (0,0,10,0);          // Test mode, 10 second interval
+        LoopTime := loopTime div 2;                 // This is for the TWebServerThread, it free runs. 7500 in -t mode
+    end;
 
     PopulateSensorArray(SensorArray, NotRaspi);                   // One-off setup of array with Sensor IDs
-    if HasOption('D', 'debug') then writelog('Sensor Array Length is ' + inttostr(Length(SensorArray)));
+    if DoDebug then writelog('Sensor Array Length is ' + inttostr(Length(SensorArray)));
 
-    if HasOption('D', 'debug') then writelog('Collecting Data');
+    if DoDebug then writelog('Collecting Data');
     CollectTemps();
     if HasOption('c', 'capture') then  begin        // we are either capturing to file or a one off show
         WriteLog('Starting Capture Loop');
+        writeln('Starting Capture Loop');
         EnterCaptureLoop(Interval);                 // does not return.
     end else
         ShowSensors();                              // relies on the CollectTemps() a few lines up
@@ -762,13 +860,11 @@ begin
     inherited Create(TheOwner);
 //    CommsServer := Nil;
     StopOnException:=True;
-    ZeroCtrlData();
 end;
 
 destructor Traspicapture.Destroy;
 begin
-    if HasOption('D', 'Debug') then writelog('Traspicapture.Destroy : free CommServer');
-//    freeandnil(CommsServer);
+    if DoDebug then writelog('Traspicapture.Destroy : free CommServer');
     inherited Destroy;
 end;
 
@@ -777,14 +873,23 @@ end;
 procedure HandleSigInt(aSignal: LongInt); cdecl;
 begin
     case aSignal of
-        SigInt : Writeln('Ctrl + C used, will clean up and shutdown.');
+        SigInt : Writeln(' Ctrl + C used, will clean up and shutdown.');
         SigTerm : writeln('TERM signal, will clean up and shutdown.');
     else
         writeln('Some signal received ??');
     end;
-    if not Application.HasOption('n', 'no_socket') then begin
+
+    if not Application.HasOption('n', 'no_net') then begin
+        {$ifdef UseISock}
         SocketThread.Terminate;
         SocketThread.Free;
+        {$else}
+        if ThreadCount > 0 then begin         // Maybe if we hung on reading web service ?
+            writeln('Force Stopping WebServ Thread');
+            WebServThread.terminate;
+            WebServThread.free;
+        end;
+        {$endif}
     end;
     ExitNow := True;        // Loop will see this and exit when it sees fit.
 end;
@@ -793,7 +898,6 @@ end;
 begin
     Application:=Traspicapture.Create(nil);
     Application.Title:='raspicapture';
-
     if FpSignal(SigInt, @HandleSigInt) = signalhandler(SIG_ERR) then begin
       Writeln('Failed to install signal error: ', fpGetErrno);
       Halt(1);

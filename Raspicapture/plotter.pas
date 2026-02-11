@@ -30,6 +30,7 @@ uses
      FPImage, FPCanvas, FPImgCanv,
      FPWritePNG, ftfont;
 
+
 type TPlotLabel = record
     Name : string;
     YPlot : integer;              // Where the plot finished
@@ -324,7 +325,9 @@ begin
     Stl.DelimitedText := S;        // have a look at first line, check format
     if Stl.Count <> 11 then begin
        writeln('ERROR, file format invalid, support, now only 11 fields, ', FFileName);
-       // close and exit ?
+       Stl.Free;
+       CloseFile(F);
+       exit(0);
     end;
     ProcessDataLine();
     while not eof(F) do begin                              // chomp through the rest of the file
@@ -492,6 +495,11 @@ begin
      end;
      if DoDebug then writeln('TPlot.fFullFileName - loading file [', FFname, ']');
      NumbDataRows := LoadFile(FFName);
+     if NumbDataRows = 0 then begin
+         writeln('ERROR, Invalid Data in ', FFName);
+         ImageAvailable := True;
+         exit;
+     end;
      if DoDebug then writeln('TPlot.fFullFileName - doing plots.');
      for i := 0 to MaxPlots do                  // draw the line
         DrawPlot(i);
