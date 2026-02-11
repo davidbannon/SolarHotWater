@@ -47,3 +47,4 @@ credentials.h*
 Tools/water_ctrl
 Tools/raspi_tool
 PumpCTRL/pumpctrl
+ESP32-S3/hwctrl/Backup
